@@ -22,6 +22,8 @@ struct addrinfo* pRemoteAddrInfo;
 
 //struct sockaddr_in servaddr;
 
+void decodemsg(char *msg, int n);
+
 int main(int argc, char **argv) {
     int     sockfd, n;
     char    recvline[MAXLINE + 1];
@@ -52,7 +54,7 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-
+    // not needed, getaddrinfo does this and saves it in pRemoteAddrInfo
     // bzero(&servaddr, sizeof(servaddr));
     // servaddr.sin_family = AF_INET;
     // servaddr.sin_port = htons(DAYTIME_PORT);  /* daytime server */
@@ -72,6 +74,7 @@ int main(int argc, char **argv) {
             printf("fputs error\n");
             exit(1);
         }
+        decodemsg(recvline, n);
     }
     
     if (n < 0) {
@@ -82,3 +85,9 @@ int main(int argc, char **argv) {
     exit(0);
 }
 
+void decodemsg(char msg[], int n) {
+    for (int i = 0; i < n; i++) {
+        printf("%s", msg);
+    }
+
+}
