@@ -22,17 +22,25 @@ struct addrinfo* pRemoteAddrInfo;
 
 //struct sockaddr_in servaddr;
 
+void decodemsg(char *msg, int n);
+
 int main(int argc, char **argv) {
     int     sockfd, n;
     char    recvline[MAXLINE + 1];
     
-    if (argc != 3) {
-        printf("usage: client <server IP address | hostname> <server port>\n");
+    if (argc <= 1 || argc == 3 || argc > 4) {
+        printf("usage: client [ <tunnel IP address | hostname> <tunnel port> ] <server IP address | hostname> <server port>\n");
         exit(1);
+    } else if (argc == 2) {
+        addrRemote = argv[1];
+        portRemote = argv[2];   
+    } else if (argc == 4) {
+        //addrTunnel = argv[1]
+        //portTunnel = argv[2]
+        addrRemote = argv[3];
+        portRemote = argv[4]; 
     }
-
-    addrRemote = argv[1];
-    portRemote = argv[2];
+    
     
     bzero(&hints, sizeof(hints));
     hints.ai_family = AF_INET;
@@ -52,7 +60,7 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
-
+    // not needed, getaddrinfo does this and saves it in pRemoteAddrInfo
     // bzero(&servaddr, sizeof(servaddr));
     // servaddr.sin_family = AF_INET;
     // servaddr.sin_port = htons(DAYTIME_PORT);  /* daytime server */
@@ -72,6 +80,7 @@ int main(int argc, char **argv) {
             printf("fputs error\n");
             exit(1);
         }
+        decodemsg(recvline, n);
     }
     
     if (n < 0) {
@@ -82,3 +91,6 @@ int main(int argc, char **argv) {
     exit(0);
 }
 
+void decodemsg(char msg[], int n) {
+    printf("%s", msg);
+}
