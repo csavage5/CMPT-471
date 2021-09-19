@@ -2,3 +2,7 @@
 client.o
 server.o
 server
+
+client
+
+.vscode/settings.json
