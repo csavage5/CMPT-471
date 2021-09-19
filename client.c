@@ -61,7 +61,7 @@ int main(int argc, char **argv) {
     //     exit(1);
     // }
 
-    if (connect(sockfd, pRemoteAddrInfo->ai_addr, sizeof(&pRemoteAddrInfo->ai_addr)) < 0) {
+    if (connect(sockfd, pRemoteAddrInfo->ai_addr, pRemoteAddrInfo->ai_addrlen) < 0) {
         printf("connect error\n");
         exit(1);
     }
