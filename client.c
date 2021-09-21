@@ -28,13 +28,13 @@ int main(int argc, char **argv) {
     int     sockfd, n;
     char    recvline[MAXLINE + 1];
     
-    if (argc <= 1 || argc == 3 || argc > 4) {
+    if (argc <= 1 || argc == 4 || argc >= 5) {
         printf("usage: client [ <tunnel IP address | hostname> <tunnel port> ] <server IP address | hostname> <server port>\n");
         exit(1);
-    } else if (argc == 2) {
+    } else if (argc == 3) {
         addrRemote = argv[1];
         portRemote = argv[2];   
-    } else if (argc == 4) {
+    } else if (argc == 5) {
         //addrTunnel = argv[1]
         //portTunnel = argv[2]
         addrRemote = argv[3];
