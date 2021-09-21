@@ -52,7 +52,7 @@ int encodeMessage() {
     size_t len = 0;
     int n = 0;
     while( (n = getline(&buffer, &len, whofd)) != -1) {
-        printf("Read line of length %zd\n", n);
+        printf("Read line of length %d\n", n);
     }
 
     pclose(whofd);
