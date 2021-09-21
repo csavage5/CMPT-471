@@ -9,6 +9,8 @@
 #define LISTENQ     1024    /* 2nd argument to listen() */
 #define DAYTIME_PORT 3333
 
+int encodeMessage();
+
 int main(int argc, char **argv) {
     int     listenfd, connfd;
     struct sockaddr_in servaddr;
@@ -30,6 +32,7 @@ int main(int argc, char **argv) {
 
         ticks = time(NULL);
         snprintf(buff, sizeof(buff), "%.24s\r\n", ctime(&ticks));
+        encodeMessage();
         write(connfd, buff, strlen(buff));
         printf("Sending response: %s", buff);
 
@@ -37,13 +40,14 @@ int main(int argc, char **argv) {
     }
 }
 
-// char* encodeMessage() {
-//     FILE * whofd = popen("who", NULL);
+int encodeMessage() {
+    FILE * whofd = popen("who", NULL);
     
-//     char buffer[200];
-//     while(fgets(buffer, 200, whofd)) {
+    char buffer[200];
+    while(fgets(buffer, 200, whofd)) {
         
-//     }
-//     printf("%s", buffer);
-// }
+    }
+    printf("%s", buffer);
+    return 0;
+}
 
