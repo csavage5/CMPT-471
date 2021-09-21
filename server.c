@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdlib.h>
 
 #define MAXLINE     4096    /* max text line length */
 #define LISTENQ     1024    /* 2nd argument to listen() */
@@ -41,15 +42,16 @@ int main(int argc, char **argv) {
 }
 
 int encodeMessage() {
-    FILE* whofd = popen("who", "r");
+    FILE *whofd = popen("who", "r");
     if (whofd == NULL) {
         printf("Error executing WHO command\n");
         exit(1);
     }
 
-    char buffer[1000];
+    char *buffer = NULL;
+    size_t len = 0;
     int i = 0;
-    while(getline(buffer, 1000, whofd) != -1) {
+    while(getline(&buffer, &len, whofd) != -1) {
         printf("%c", buffer[i]);
         i++;
     }
