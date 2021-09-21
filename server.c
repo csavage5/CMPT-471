@@ -31,6 +31,8 @@ int main(int argc, char **argv) {
     for ( ; ; ) {
         connfd = accept(listenfd, (struct sockaddr *) NULL, NULL);
 
+        printf("Received message\n");
+
         ticks = time(NULL);
         snprintf(buff, sizeof(buff), "%.24s\r\n", ctime(&ticks));
         encodeMessage();
@@ -47,6 +49,7 @@ int encodeMessage() {
         printf("Error executing WHO command\n");
         exit(1);
     }
+    printf("Opened popen stream\n");
 
     char *buffer = NULL;
     size_t len = 0;
@@ -56,6 +59,7 @@ int encodeMessage() {
     }
 
     pclose(whofd);
+    printf("Closed popen stream\n");
     //printf("%s", buffer);
     return 0;
 }
