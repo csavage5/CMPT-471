@@ -50,11 +50,12 @@ int encodeMessage() {
 
     char *buffer = NULL;
     size_t len = 0;
-    int i = 0;
-    while(getline(&buffer, &len, whofd) != -1) {
-        printf("%c", buffer[i]);
-        i++;
+    int n = 0;
+    while( (n = getline(&buffer, &len, whofd)) != -1) {
+        printf("Read line of length %zd\n", n);
     }
+
+    pclose(whofd);
     //printf("%s", buffer);
     return 0;
 }
