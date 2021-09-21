@@ -41,11 +41,15 @@ int main(int argc, char **argv) {
 }
 
 int encodeMessage() {
-    FILE * whofd = popen("who", "r");
-    
+    FILE* whofd = popen("who", "r");
+    if (whofd == NULL) {
+        printf("Error executing WHO command\n");
+        exit(1);
+    }
+
     char buffer[1000];
     int i = 0;
-    while(fgets(buffer, 1000, whofd)) {
+    while(getline(buffer, 1000, whofd) != -1) {
         printf("%c", buffer[i]);
         i++;
     }
