@@ -37,3 +37,13 @@ int main(int argc, char **argv) {
     }
 }
 
+// char* encodeMessage() {
+//     FILE * whofd = popen("who", NULL);
+    
+//     char buffer[200];
+//     while(fgets(buffer, 200, whofd)) {
+        
+//     }
+//     printf("%s", buffer);
+// }
+

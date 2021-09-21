@@ -80,7 +80,7 @@ int main(int argc, char **argv) {
             printf("fputs error\n");
             exit(1);
         }
-        decodemsg(recvline, n);
+        //decodemsg(recvline, n);
     }
     
     if (n < 0) {
@@ -92,5 +92,6 @@ int main(int argc, char **argv) {
 }
 
 void decodemsg(char msg[], int n) {
-    printf("%s", msg);
+    //printf("%s", msg);
+    
 }
