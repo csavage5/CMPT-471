@@ -41,7 +41,7 @@ int main(int argc, char **argv) {
 }
 
 int encodeMessage() {
-    FILE * whofd = popen("who", NULL);
+    FILE * whofd = popen("who", "r");
     
     char buffer[200];
     while(fgets(buffer, 200, whofd)) {
