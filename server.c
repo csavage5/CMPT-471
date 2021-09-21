@@ -43,11 +43,13 @@ int main(int argc, char **argv) {
 int encodeMessage() {
     FILE * whofd = popen("who", "r");
     
-    char buffer[200];
-    while(fgets(buffer, 200, whofd)) {
-        
+    char buffer[1000];
+    int i = 0;
+    while(fgets(buffer, 1000, whofd)) {
+        printf("%c", buffer[i]);
+        i++;
     }
-    printf("%s", buffer);
+    //printf("%s", buffer);
     return 0;
 }
 
