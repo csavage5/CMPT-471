@@ -35,7 +35,7 @@ int main(int argc, char **argv) {
 
         ticks = time(NULL);
         snprintf(buff, sizeof(buff), "%.24s\r\n", ctime(&ticks));
-        encodeMessage();
+        //encodeMessage();
         write(connfd, buff, strlen(buff));
         printf("Sending response: %s", buff);
 
@@ -57,6 +57,8 @@ int encodeMessage() {
     while( (n = getline(&buffer, &len, whofd)) != -1) {
         printf("Read line of length %d\n", n);
     }
+
+    printf("%s", buffer);
 
     pclose(whofd);
     printf("Closed popen stream\n");
