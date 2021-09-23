@@ -13,6 +13,13 @@
 #define MAXLINE     4096    /* max text line length */
 #define DAYTIME_PORT 3333
 
+struct message{
+    int addrlen, timelen, msglen;
+    char addr[MAXLINE];
+    char currtime[MAXLINE];
+    char payload[MAXLINE];
+}msg;
+
 static char *portRemote;
 static char *addrRemote;
 
@@ -80,7 +87,7 @@ int main(int argc, char **argv) {
             printf("fputs error\n");
             exit(1);
         }
-        //decodemsg(recvline, n);
+        printf("Raw message:\n%s", recvline);
     }
     
     if (n < 0) {
@@ -88,10 +95,16 @@ int main(int argc, char **argv) {
         exit(1);
     }
 
+    decodemsg(recvline, n);
+
     exit(0);
 }
 
 void decodemsg(char msg[], int n) {
-    //printf("%s", msg);
+    printf("Raw message:\n%s\n", msg);
     
+    //char* token = 
+
+    //while (strtok(msg, '\n'))
+
 }
