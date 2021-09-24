@@ -123,35 +123,64 @@ void decodemsg(char message[], int n) {
     bzero(&msg, sizeof(msg));
 
     char tokenString[2] = "=";
-    enum DecodeState decodeState = CURRTIME;
 
+    //get addrlen
     char *pToken = strtok(message, tokenString);
+    msg.addrlen = atoi(pToken);
 
-    while ( pToken != NULL) {
-        printf("current token: %s\n", pToken);
+    //get timelen
+    pToken = strtok(NULL, tokenString);
+    msg.timelen = atoi(pToken);
+    
+    //get msglen
+    pToken = strtok(NULL, tokenString);
+    msg.msglen = atoi(pToken);
 
-        switch (decodeState) {
-            case ADDRLEN:
-            case TIMELEN:
-            case MSGLEN:
-                break;
-
-            case ADDR:
-                strncpy(msg.addr, pToken, MAXLINE);
-                break;
-            case CURRTIME:
-                strncpy(msg.currtime, pToken, MAXLINE);
-                break;
-            case PAYLOAD:
-                strncpy(msg.payload, pToken, MAXLINE);
-                break;
-            default:
-                break;
-        }
-
-        pToken = strtok(NULL, tokenString);
-        decodeState += 1;
+    // get ADDR
+    pToken = strtok(NULL, tokenString);
+    
+    if (msg.addrlen > 0) {
+        strncpy(msg.addr, pToken, msg.addrlen);
     }
+
+    //get CURRTIME
+    if (msg.currtime > 0) {
+        strncpy(msg.currtime, pToken+msg.addrlen, msg.timelen);
+    }
+
+    //get PAYLOAD
+    if (msg.msglen > 0) {
+        strncpy(msg.payload, pToken + msg.addrlen + msg.timelen, msg.msglen);
+    }
+    // enum DecodeState decodeState = CURRTIME;
+
+    // char *pToken = strtok(message, tokenString);
+
+    // while ( pToken != NULL) {
+    //     printf("current token: %s\n", pToken);
+
+    //     switch (decodeState) {
+    //         case ADDRLEN:
+    //         case TIMELEN:
+    //         case MSGLEN:
+    //             break;
+
+    //         case ADDR:
+    //             strncpy(msg.addr, pToken, MAXLINE);
+    //             break;
+    //         case CURRTIME:
+    //             strncpy(msg.currtime, pToken, MAXLINE);
+    //             break;
+    //         case PAYLOAD:
+    //             strncpy(msg.payload, pToken, MAXLINE);
+    //             break;
+    //         default:
+    //             break;
+    //     }
+
+    //     pToken = strtok(NULL, tokenString);
+    //     decodeState += 1;
+    // }
 
     displayMessage();
 
@@ -167,6 +196,6 @@ void displayMessage() {
     inet_ntop(AF_INET, &((struct sockaddr_in *) pRemoteAddrInfo->ai_addr)->sin_addr.s_addr, tempBuffer, pRemoteAddrInfo->ai_addrlen);
     printf("IP Address: %s\n", tempBuffer); 
     
-    printf("Time: %s\n", msg.currtime);
+    printf("Time: %s", msg.currtime);
     printf("Who:\n%s", msg.payload);
 }

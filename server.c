@@ -131,16 +131,22 @@ void getPayload() {
 
 void encodeMessage() {
     //strcat(outgoingBuffer, (msg.addrlen)
+    int offset = 0;
+    msg.addrlen = 0;
 
-    char tokenString[2] = "=";
+    offset += sprintf(outgoingBuffer, "%d", msg.addrlen);
+    offset += sprintf(outgoingBuffer + offset, "%c", '=');
 
-    // strcat(outgoingBuffer, msg.addr);
-    // strcat(outgoingBuffer, tokenString);
+    offset += sprintf(outgoingBuffer + offset, "%d", msg.timelen);
+    offset += sprintf(outgoingBuffer + offset, "%c", '=');
 
-    strcat(outgoingBuffer, msg.currtime);
-    strcat(outgoingBuffer, tokenString);
+    offset += sprintf(outgoingBuffer + offset, "%d", msg.msglen);
+    offset += sprintf(outgoingBuffer + offset, "%c", '=');
 
-    strcat(outgoingBuffer, msg.payload);
+    strncpy(outgoingBuffer + offset, msg.currtime, msg.timelen);
+    offset += msg.timelen;
+
+    strncpy(outgoingBuffer + offset, msg.payload, msg.msglen);
 
     printf("Encoded message:\n%s\n", outgoingBuffer);
 }
