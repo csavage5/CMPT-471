@@ -37,16 +37,9 @@ int daytimePort;
 struct sockaddr_in clientAddr;
 socklen_t clientAddrLen = sizeof(clientAddr);
 
-
 void getCurrTime();
 void getPayload();
 void encodeMessage();
-
-
-// TODO:
-// - X execute WHO command 
-// - encode 
-// - print name and IP of connecting client
 
 void resetBuffers();
 
@@ -98,10 +91,9 @@ int main(int argc, char **argv) {
         encodeMessage();
 
         write(connfd, outgoingBuffer, strlen(outgoingBuffer));
-        printf("Sending response:\n%s", outgoingBuffer);
-
         close(connfd);
 
+        printf("Sent response.\n\n");
         resetBuffers();
     }
 }
@@ -109,7 +101,7 @@ int main(int argc, char **argv) {
 void getCurrTime() {
     ticks = time(NULL);
     msg.timelen = snprintf(msg.currtime, MAXLINE, "%.24s\r\n", ctime(&ticks));
-    printf("CurrTime buffer: %s\n", msg.currtime);
+    //printf("CurrTime buffer: %s\n", msg.currtime);
 
 }
 
@@ -123,7 +115,7 @@ void getPayload() {
 
     while ( fgets(msg.payload, MAXLINE, whofd) != NULL);
 
-    printf("Playload buffer:\n%s\n", msg.payload);
+    //printf("Playload buffer:\n%s\n", msg.payload);
     msg.msglen = strlen(msg.payload);
     pclose(whofd);
     //printf("Closed popen stream\n");
@@ -148,7 +140,7 @@ void encodeMessage() {
 
     strncpy(outgoingBuffer + offset, msg.payload, msg.msglen);
 
-    printf("Encoded message:\n%s\n", outgoingBuffer);
+    //printf("Encoded message:\n%s\n", outgoingBuffer);
 }
 
 void resetBuffers() {

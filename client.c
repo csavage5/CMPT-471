@@ -11,7 +11,6 @@
 
 
 #define MAXLINE     4096    /* max text line length */
-#define DAYTIME_PORT 3333
 
 struct message{
     int addrlen, timelen, msglen;
@@ -20,14 +19,6 @@ struct message{
     char payload[MAXLINE];
 }msg;
 
-enum DecodeState {
-    ADDRLEN = 0,
-    TIMELEN = 1,
-    MSGLEN = 2,
-    ADDR = 3,
-    CURRTIME = 4,
-    PAYLOAD = 5
-};
 static char *addrTunnel;
 static char *portTunnel;
 static char *addrRemote;
@@ -102,7 +93,7 @@ int main(int argc, char **argv) {
             printf("fputs error\n");
             exit(1);
         }
-    
+
         //printf("Raw message:\n%s", recvline);
     }
     
@@ -117,8 +108,8 @@ int main(int argc, char **argv) {
 }
 
 void decodemsg(char message[], int n) {
-    printf("Decoding message:\n");
-    printf("Raw message:\n%s\n", message);
+    printf("Decoding message...\n");
+    //printf("Raw message:\n%s\n", message);
     
     bzero(&msg, sizeof(msg));
 
@@ -152,43 +143,13 @@ void decodemsg(char message[], int n) {
     if (msg.msglen > 0) {
         strncpy(msg.payload, pToken + msg.addrlen + msg.timelen, msg.msglen);
     }
-    // enum DecodeState decodeState = CURRTIME;
-
-    // char *pToken = strtok(message, tokenString);
-
-    // while ( pToken != NULL) {
-    //     printf("current token: %s\n", pToken);
-
-    //     switch (decodeState) {
-    //         case ADDRLEN:
-    //         case TIMELEN:
-    //         case MSGLEN:
-    //             break;
-
-    //         case ADDR:
-    //             strncpy(msg.addr, pToken, MAXLINE);
-    //             break;
-    //         case CURRTIME:
-    //             strncpy(msg.currtime, pToken, MAXLINE);
-    //             break;
-    //         case PAYLOAD:
-    //             strncpy(msg.payload, pToken, MAXLINE);
-    //             break;
-    //         default:
-    //             break;
-    //     }
-
-    //     pToken = strtok(NULL, tokenString);
-    //     decodeState += 1;
-    // }
 
     displayMessage();
 
 }
 
 void displayMessage() {
-    //printf("Received message:\n");
-    //struct sockaddr_in * serverAddr
+    
     getnameinfo(pRemoteAddrInfo->ai_addr, pRemoteAddrInfo->ai_addrlen, tempBuffer, MAXLINE, NULL, 0, 0);
     printf("Server name: %s\n", tempBuffer);
     bzero(&tempBuffer, MAXLINE);
