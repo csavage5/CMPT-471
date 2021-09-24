@@ -42,6 +42,14 @@ void getCurrTime();
 void getPayload();
 void encodeMessage();
 
+
+// TODO:
+// - X execute WHO command 
+// - encode 
+// - print name and IP of connecting client
+
+void resetBuffers();
+
 int main(int argc, char **argv) {
     
     if (argc != 2) {
@@ -55,9 +63,8 @@ int main(int argc, char **argv) {
     }
 
     // initialization
-    bzero(&msg, sizeof(msg));
-    bzero(&outgoingBuffer, sizeof(outgoingBuffer));
-    bzero(&tempBuffer, sizeof(tempBuffer));
+    resetBuffers();
+
 
     // set up server
     listenfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -78,11 +85,11 @@ int main(int argc, char **argv) {
         //TODO: print the name and IP of the client who sent the message
         printf("Received message from:\n");
         inet_ntop(AF_INET, &clientAddr.sin_addr.s_addr, tempBuffer, clientAddrLen);        
-        printf("%s\n", tempBuffer);
+        printf("   IP Address: %s\n", tempBuffer);
         bzero(&tempBuffer, sizeof(tempBuffer));
         
         getnameinfo((struct sockaddr *) &clientAddr, clientAddrLen, tempBuffer, MAXLINE, tempBuffer2, MAXLINE, 0);
-        printf("%s | %s\n", tempBuffer, tempBuffer2);
+        printf("   Hostname: %s\n", tempBuffer);
         // get WHO info to send to client
         
         getCurrTime();
@@ -95,14 +102,13 @@ int main(int argc, char **argv) {
 
         close(connfd);
 
-        bzero(&msg, sizeof(msg));
-        bzero(&outgoingBuffer, sizeof(outgoingBuffer));
+        resetBuffers();
     }
 }
 
 void getCurrTime() {
     ticks = time(NULL);
-    snprintf(msg.currtime, MAXLINE, "%.24s\r\n", ctime(&ticks));
+    msg.timelen = snprintf(msg.currtime, MAXLINE, "%.24s\r\n", ctime(&ticks));
     printf("CurrTime buffer: %s\n", msg.currtime);
 
 }
@@ -118,16 +124,36 @@ void getPayload() {
     while ( fgets(msg.payload, MAXLINE, whofd) != NULL);
 
     printf("Playload buffer:\n%s\n", msg.payload);
-
+    msg.msglen = strlen(msg.payload);
     pclose(whofd);
     //printf("Closed popen stream\n");
 }
 
 void encodeMessage() {
-    
-    strcat(outgoingBuffer, msg.addr);
+    //strcat(outgoingBuffer, (msg.addrlen)
+
+    char tokenString[2] = "=";
+
+    // strcat(outgoingBuffer, msg.addr);
+    // strcat(outgoingBuffer, tokenString);
+
     strcat(outgoingBuffer, msg.currtime);
+    strcat(outgoingBuffer, tokenString);
+
     strcat(outgoingBuffer, msg.payload);
+
     printf("Encoded message:\n%s\n", outgoingBuffer);
 }
 
+void resetBuffers() {
+
+    bzero(&msg, sizeof(msg));
+    bzero(&outgoingBuffer, sizeof(outgoingBuffer));
+    bzero(&tempBuffer, sizeof(tempBuffer));
+    bzero(&tempBuffer2, sizeof(tempBuffer2));
+
+    msg.addrlen = 0;
+    msg.msglen = 0;
+    msg.timelen = 0;
+
+}
