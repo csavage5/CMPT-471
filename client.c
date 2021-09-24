@@ -89,10 +89,10 @@ int main(int argc, char **argv) {
 
     while ( (n = read(sockfd, recvline, MAXLINE)) > 0) {
         recvline[n] = 0;        /* null terminate */
-        if (fputs(recvline, stdout) == EOF) {
-            printf("fputs error\n");
-            exit(1);
-        }
+        // if (fputs(recvline, stdout) == EOF) {
+        //     printf("fputs error\n");
+        //     exit(1);
+        // }
 
         //printf("Raw message:\n%s", recvline);
     }
