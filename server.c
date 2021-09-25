@@ -69,9 +69,10 @@ int main(int argc, char **argv) {
 
     bind(listenfd, (struct sockaddr *) &servaddr, sizeof(servaddr));
     listen(listenfd, LISTENQ);
-    printf("Listening...\n\n");
 
     for ( ; ; ) {
+        printf("\nListening...\n\n");
+
         //wait for incoming connection
         clientConnFD = accept(listenfd, (struct sockaddr *) &clientAddr, &clientAddrLen);
 
