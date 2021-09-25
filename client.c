@@ -66,11 +66,11 @@ int main(int argc, char **argv) {
         portServer = argv[4]; 
 
         ConnectToTunnel();
-        //WaitForServerMessage();
+        WaitForServerMessage();
 
-        // DisplayServerInfo();
-        // DisplayMsgStruct();
-        // DisplayTunnelInfo();
+        DisplayServerInfo();
+        DisplayMsgStruct();
+        DisplayTunnelInfo();
     }
     
 
@@ -109,7 +109,14 @@ void ConnectToTunnel() {
 
     int error = getaddrinfo(addrTunnel, portTunnel, &hints, &pTunnelAddrInfo);
     if (error == 1) {
-        printf("Error retrieving remote address info\n");
+        printf("Error retrieving tunnel address info\n");
+        exit(1);
+    }
+
+    // for printing out server info when msg struct is received
+    error = getaddrinfo(addrServer, portServer, &hints, &pServerAddrInfo);
+    if (error == 1) {
+        printf("Error retrieving server address info\n");
         exit(1);
     }
 
@@ -130,6 +137,7 @@ void ConnectToTunnel() {
     strcat(outgoingBuffer, addrServer);
     strcat(outgoingBuffer, ":");
     strcat(outgoingBuffer, portServer);
+    strcat(outgoingBuffer, "!");
 
     if ( ( n = write(sockfd, outgoingBuffer, strlen(outgoingBuffer))) == -1) {
         printf("Error - write failed\n");
@@ -160,14 +168,18 @@ void WaitForServerMessage() {
         exit(1);
     }
 
-    printf("Received message from server.");
+    printf("Received message from server.\n");
 
     DecodeMsg(recvline, n);
 }
 
 void DecodeMsg(char message[], int n) {
     printf("Decoding message...\n\n");
-    //printf("Raw message:\n%s\n", message);
+    printf("Raw message:\n%s\n", message);
+
+    if (strlen(message) == 0) {
+        printf("Error - no message received\n");
+    }
     
     bzero(&msg, sizeof(msg));
 
@@ -223,7 +235,7 @@ void DisplayTunnelInfo() {
     bzero(&tempBuffer, MAXLINE);
     getnameinfo(pTunnelAddrInfo->ai_addr, pTunnelAddrInfo->ai_addrlen, tempBuffer, MAXLINE, NULL, 0, 0);
     
-    printf("Via Tunnel: %s\n", tempBuffer);
+    printf("\nVia Tunnel: %s\n", tempBuffer);
     bzero(&tempBuffer, MAXLINE);
 
     printf("IP Address: %s\n", addrTunnel);

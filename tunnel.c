@@ -121,6 +121,12 @@ void ReadServerInfoFromClient() {
 
     while ( (n = read(clientConnFD, recvline, MAXLINE)) > 0) {
         recvline[n] = 0;        /* null terminate */
+        if (recvline[n-1] == '!') {
+            // CASE: found end of transmission from client
+            recvline[n-1] = 0;
+            break;
+        }
+
         // if (fputs(recvline, stdout) == EOF) {
         //     printf("fputs error\n");
         //     exit(1);
@@ -202,7 +208,7 @@ void WaitForServerMsg() {
 void ForwardMsgToClient() {
     printf("Forwarding: %s\n", recvline);
     
-    write(clientConnFD, recvline, n);
+    write(clientConnFD, recvline, strlen(recvline));
     close(clientConnFD);
 }
 
