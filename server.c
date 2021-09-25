@@ -27,7 +27,7 @@ char tempBuffer2[MAXLINE];
 
 
 // server
-int     listenfd, connfd;
+int     listenfd, clientConnFD;
 struct sockaddr_in servaddr;
 time_t ticks;
 
@@ -73,7 +73,7 @@ int main(int argc, char **argv) {
 
     for ( ; ; ) {
         //wait for incoming connection
-        connfd = accept(listenfd, (struct sockaddr *) &clientAddr, &clientAddrLen);
+        clientConnFD = accept(listenfd, (struct sockaddr *) &clientAddr, &clientAddrLen);
 
         //TODO: print the name and IP of the client who sent the message
         printf("Received message from:\n");
@@ -90,10 +90,10 @@ int main(int argc, char **argv) {
 
         encodeMessage();
 
-        write(connfd, outgoingBuffer, strlen(outgoingBuffer));
-        close(connfd);
+        write(clientConnFD, outgoingBuffer, strlen(outgoingBuffer));
+        close(clientConnFD);
 
-        printf("Sent response.\n\n");
+        printf("Sent response: %s\n\n", outgoingBuffer);
         resetBuffers();
     }
 }

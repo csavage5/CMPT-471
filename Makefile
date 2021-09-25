@@ -8,7 +8,8 @@ CFLAGS= -Wall -g
 all: 
 	$(CC) $(CFLAGS) client.c -o client
 	$(CC) $(CFLAGS) server.c -o server
-
+	$(CC) $(CFLAGS) tunnel.c -o tunnel
+	
 #all: server client
 
 

@@ -26,6 +26,7 @@ static char *portServer;
 
 struct addrinfo hints;
 struct addrinfo* pServerAddrInfo;
+struct addrinfo* pTunnelAddrInfo;
 int  sockfd, n;
 char recvline[MAXLINE + 1];
 
@@ -34,16 +35,18 @@ char tempBuffer[MAXLINE];
 //struct sockaddr_in servaddr;
 
 void ConnectToServer();
-void WaitForServerResponse();
+void ConnectToTunnel();
 
+void WaitForServerMessage();
 void DecodeMsg(char *msg, int n);
 
 void DisplayServerInfo();
 void DisplayMsgStruct();
+void DisplayTunnelInfo();
 
 int main(int argc, char **argv) {
 
-    if (argc <= 1 || argc == 4 || argc >= 5) {
+    if (argc <= 1 || argc == 4 || argc > 5) {
         printf("usage: client [ <tunnel IP address | hostname> <tunnel port> ] <server IP address | hostname> <server port>\n");
         exit(1);
     } else if (argc == 3) {
@@ -51,7 +54,7 @@ int main(int argc, char **argv) {
         portServer = argv[2]; 
         
         ConnectToServer();
-        WaitForServerResponse();
+        WaitForServerMessage();
 
         DisplayServerInfo();
         DisplayMsgStruct();
@@ -62,11 +65,12 @@ int main(int argc, char **argv) {
         addrServer = argv[3];
         portServer = argv[4]; 
 
-        // sendToTunnel()
-        //  - get ack
-        //  - send server IP and name
-        // waitForServerResponse()
-        //  - decodemsg()
+        ConnectToTunnel();
+        //WaitForServerMessage();
+
+        // DisplayServerInfo();
+        // DisplayMsgStruct();
+        // DisplayTunnelInfo();
     }
     
 
@@ -95,9 +99,52 @@ void ConnectToServer() {
         printf("connect error\n");
         exit(1);
     }
+
 }
 
-void WaitForServerResponse() {
+void ConnectToTunnel() {
+    bzero(&hints, sizeof(hints));
+    hints.ai_family = AF_INET;
+    hints.ai_socktype = SOCK_STREAM;
+
+    int error = getaddrinfo(addrTunnel, portTunnel, &hints, &pTunnelAddrInfo);
+    if (error == 1) {
+        printf("Error retrieving remote address info\n");
+        exit(1);
+    }
+
+    if ( (sockfd = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
+        printf("socket error\n");
+        exit(1);
+    }
+
+    if (connect(sockfd, pTunnelAddrInfo->ai_addr, pTunnelAddrInfo->ai_addrlen) < 0) {
+        printf("connect error\n");
+        exit(1);
+    }
+    
+    printf("Connected to tunnel.\n");
+
+    char outgoingBuffer[MAXLINE];
+    bzero(&outgoingBuffer, MAXLINE);
+    strcat(outgoingBuffer, addrServer);
+    strcat(outgoingBuffer, ":");
+    strcat(outgoingBuffer, portServer);
+
+    if ( ( n = write(sockfd, outgoingBuffer, strlen(outgoingBuffer))) == -1) {
+        printf("Error - write failed\n");
+        exit(1);
+    }
+    printf("Sent server info to tunnel (%dB).\n", n);
+
+}
+
+//blocking - waits for server to send a message; also calls DecodeMsg afterwards
+void WaitForServerMessage() {
+    printf("Waiting for server response...\n");
+    
+    bzero(&recvline, MAXLINE);
+
     while ( (n = read(sockfd, recvline, MAXLINE)) > 0) {
         recvline[n] = 0;        /* null terminate */
         // if (fputs(recvline, stdout) == EOF) {
@@ -112,6 +159,8 @@ void WaitForServerResponse() {
         printf("read error\n");
         exit(1);
     }
+
+    printf("Received message from server.");
 
     DecodeMsg(recvline, n);
 }
@@ -168,4 +217,15 @@ void DisplayMsgStruct() {
     
     printf("Time: %s", msg.currtime);
     printf("Who:\n%s", msg.payload);
+}
+
+void DisplayTunnelInfo() {
+    bzero(&tempBuffer, MAXLINE);
+    getnameinfo(pTunnelAddrInfo->ai_addr, pTunnelAddrInfo->ai_addrlen, tempBuffer, MAXLINE, NULL, 0, 0);
+    
+    printf("Via Tunnel: %s\n", tempBuffer);
+    bzero(&tempBuffer, MAXLINE);
+
+    printf("IP Address: %s\n", addrTunnel);
+    printf("Port #: %s\n", portTunnel);
 }
