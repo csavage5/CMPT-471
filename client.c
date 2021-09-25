@@ -137,7 +137,7 @@ void ConnectToTunnel() {
     strcat(outgoingBuffer, addrServer);
     strcat(outgoingBuffer, ":");
     strcat(outgoingBuffer, portServer);
-    strcat(outgoingBuffer, "!");
+    strcat(outgoingBuffer, "!"); //terminating character so the tunnel knows when to stop reading
 
     if ( ( n = write(sockfd, outgoingBuffer, strlen(outgoingBuffer))) == -1) {
         printf("Error - write failed\n");
@@ -238,6 +238,8 @@ void DisplayTunnelInfo() {
     printf("\nVia Tunnel: %s\n", tempBuffer);
     bzero(&tempBuffer, MAXLINE);
 
-    printf("IP Address: %s\n", addrTunnel);
+
+    inet_ntop(AF_INET, &((struct sockaddr_in *) pTunnelAddrInfo->ai_addr)->sin_addr.s_addr, tempBuffer, pTunnelAddrInfo->ai_addrlen);
+    printf("IP Address: %s\n", tempBuffer);
     printf("Port #: %s\n", portTunnel);
 }
