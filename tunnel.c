@@ -206,7 +206,7 @@ void WaitForServerMsg() {
 }
 
 void ForwardMsgToClient() {
-    printf("Forwarding: %s\n", recvline);
+    printf("Forwarding message: %s\n", recvline);
     
     write(clientConnFD, recvline, strlen(recvline));
     close(clientConnFD);

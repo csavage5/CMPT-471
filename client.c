@@ -46,7 +46,7 @@ void DisplayTunnelInfo();
 
 int main(int argc, char **argv) {
 
-    if (argc <= 1 || argc == 4 || argc > 5) {
+    if (argc <= 2 || argc == 4 || argc > 5) {
         printf("usage: client [ <tunnel IP address | hostname> <tunnel port> ] <server IP address | hostname> <server port>\n");
         exit(1);
     } else if (argc == 3) {
