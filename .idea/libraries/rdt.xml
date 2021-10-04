@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="rdt">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/A2/rdt.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>
