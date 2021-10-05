@@ -8,3 +8,7 @@ client
 .vscode/settings.json
 
 tunnel
+A2/out/production/A2/rdt/ReceiverThread.class
+A2/out/production/A2/rdt/RDTSegment.class
+A2/out/production/A2/rdt/RDTBuffer.class
+A2/out/production/A2/rdt/RDT.class

@@ -97,9 +97,29 @@ public class RDT {
 		//TODO ****** complete
 		
 		// divide data into segments
+		int index = 0;
+		ArrayList<RDTSegment> segments = new ArrayList<>();
+
+		while (size - index > MSS) {
+			segments.add(new RDTSegment());
+			segments.get(segments.size()-1).fillData(Arrays.copyOfRange(data, index, index + MSS - 1), MSS);
+
+			index += MSS;
+		}
+
+		if (index < size - 1) {
+			// CASE: have left over data < MSS that needs to be sent
+			segments.add(new RDTSegment());
+			segments.get(segments.size()-1).fillData(Arrays.copyOfRange(data, index, size - 1), size - 1 - index);
+			index += size - index;
+		}
 
 		// put each segment into sndBuf
-		
+		for (RDTSegment rdtSeg:segments) {
+			// TODO - modify flags for segment
+			sndBuf.putNext(rdtSeg);
+		}
+
 		// send using udp_send()
 		//Utility.udp_send(segment, socket, dst_ip, dst_port);
 
@@ -189,7 +209,6 @@ class RDTBuffer {
 
 
 class ReceiverThread extends Thread {
-	public static final int MSS = 100; // Max segment size in bytes
 
 	RDTBuffer rcvBuf, sndBuf;
 	DatagramSocket socket;
@@ -217,8 +236,8 @@ class ReceiverThread extends Thread {
 		//                             stuff (e.g, send ACK)
 		//
 
-		byte[] packetBuffer = new byte[MSS];
-		DatagramPacket packet = new DatagramPacket(packetBuffer, MSS);
+		byte[] packetBuffer = new byte[RDT.MSS];
+		DatagramPacket packet = new DatagramPacket(packetBuffer, RDT.MSS);
 
 		while(true) {
 			try {

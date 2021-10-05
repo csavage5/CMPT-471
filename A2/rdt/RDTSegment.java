@@ -63,8 +63,26 @@ public class RDTSegment {
 		// complete
 		return true;
 	}
-	
-	// converts this seg to a series of bytes
+
+	/**
+	 * Copies passed array into data[]
+	 * @param _size must be <= RDT.MSS
+	 */
+	public void fillData(byte[] _data, int _size) {
+		if (_size > RDT.MSS) {
+			// CASE: passed array too large for segment
+			System.out.printf("Error: segment cannot hold %d bytes of data\n", _size);
+			// TODO add throw?
+		}
+
+		data = _data;
+		length = _size;
+	}
+
+	/**
+	 * Adds headers and data[] to payload in bytes
+	 * @param payload
+	 */
 	public void makePayload(byte[] payload) {
 		// add header 
 		Utility.intToByte(seqNum, payload, SEQ_NUM_OFFSET);
