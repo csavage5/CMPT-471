@@ -75,6 +75,7 @@ public class RDTSegment {
 		Utility.intToByte(length, payload, LENGTH_OFFSET);
 		//add data
 		for (int i=0; i<length; i++)
+			// put data after all header info
 			payload[i+HDR_SIZE] = data[i];
 	}
 	

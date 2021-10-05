@@ -33,9 +33,14 @@ public class RDT {
 	private RDTBuffer sndBuf;
 	private RDTBuffer rcvBuf;
 	
-	private ReceiverThread rcvThread;  
-	
-	
+	private ReceiverThread rcvThread;
+
+	/**
+	 * Constructor - for default buffer sizes
+	 * @param dst_hostname_
+	 * @param dst_port_
+	 * @param local_port_
+	 */
 	RDT (String dst_hostname_, int dst_port_, int local_port_) {
 		local_port = local_port_;
 		dst_port = dst_port_; 
@@ -53,7 +58,15 @@ public class RDT {
 		rcvThread = new ReceiverThread(rcvBuf, sndBuf, socket, dst_ip, dst_port);
 		rcvThread.start();
 	}
-	
+
+	/**
+	 * Constructor - for custom buffer sizes
+	 * @param dst_hostname_
+	 * @param dst_port_
+	 * @param local_port_
+	 * @param sndBufSize
+	 * @param rcvBufSize
+	 */
 	RDT (String dst_hostname_, int dst_port_, int local_port_, int sndBufSize, int rcvBufSize) {
 		local_port = local_port_;
 		dst_port = dst_port_;
@@ -101,7 +114,7 @@ public class RDT {
 	// returns number of bytes copied in buf
 	public int receive (byte[] buf, int size) {
 		//TODO *****  complete
-
+		// pop a segment from the receive buffer?
 		//socket.receive();
 
 		return 0;   // fix
@@ -121,7 +134,7 @@ class RDTBuffer {
 	public int size;	
 	public int base;
 	public int next;
-	public Semaphore semMutex; // for mutual exclusion
+	public Semaphore semMutex; // for mutual exclusion (mutex for buf)
 	public Semaphore semFull; // #of full slots
 	public Semaphore semEmpty; // #of Empty slots
 	
@@ -136,8 +149,6 @@ class RDTBuffer {
 		semEmpty = new Semaphore(bufSize, true);
 	}
 
-	
-	
 	// Put a segment in the next available slot in the buffer
 	public void putNext(RDTSegment seg) {		
 		try {
@@ -178,6 +189,8 @@ class RDTBuffer {
 
 
 class ReceiverThread extends Thread {
+	public static final int MSS = 100; // Max segment size in bytes
+
 	RDTBuffer rcvBuf, sndBuf;
 	DatagramSocket socket;
 	InetAddress dst_ip;
@@ -204,7 +217,8 @@ class ReceiverThread extends Thread {
 		//                             stuff (e.g, send ACK)
 		//
 
-		DatagramPacket packet = null;
+		byte[] packetBuffer = new byte[MSS];
+		DatagramPacket packet = new DatagramPacket(packetBuffer, MSS);
 
 		while(true) {
 			try {
@@ -213,7 +227,19 @@ class ReceiverThread extends Thread {
 				e.printStackTrace();
 			}
 
-			packet.
+			//make segment from packet
+			RDTSegment receivedSegment = new RDTSegment();
+			makeSegment(receivedSegment, packet.getData());
+
+			//verify receivedSegment checksum
+			receivedSegment.isValid();
+
+			if (receivedSegment.containsAck()) {
+				// remove waiting segments from sndBuf
+			} else if (receivedSegment.containsData()) {
+				//put data in rcvBuf
+				// send ack ?
+			}
 
 		}
 
