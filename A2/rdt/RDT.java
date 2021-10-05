@@ -20,6 +20,8 @@ public class RDT {
 	public static final int GBN = 1;   // Go back N protocol
 	public static final int SR = 2;    // Selective Repeat
 	public static final int protocol = GBN;
+
+	public int seqNum = 1;
 	
 	public static double lossRate = 0.0;
 	public static Random random = new Random(); 
@@ -117,17 +119,31 @@ public class RDT {
 		// put each segment into sndBuf
 		for (RDTSegment rdtSeg:segments) {
 			// TODO - modify flags for segment
+			rdtSeg.seqNum = seqNum;
+			rdtSeg.checksum = rdtSeg.computeChecksum();
+			rdtSeg.rcvWin = rcvBuf.size;
 			sndBuf.putNext(rdtSeg);
+			increaseSeqNum(rdtSeg.length);
 		}
 
-		// send using udp_send()
-		//Utility.udp_send(segment, socket, dst_ip, dst_port);
 
-		// schedule timeout for segment(s)
+		// TODO send using udp_send()
+		//sndBuf.sendAllNewSegments();
+		//Utility.udp_send(segment, socket, dst_ip, dst_port);
+		// mark as sent in buffer
+
+		// TODO schedule timeout for segment(s)
 			
 		return size;
 	}
-	
+
+	/**
+	 * Increments RDT.seqNum and returns it
+	 * @return
+	 */
+	public void increaseSeqNum(int bytes) {
+		seqNum += bytes;
+	}
 	
 	// called by app
 	// receive one segment at a time
@@ -196,6 +212,7 @@ class RDTBuffer {
 	public void putSeqNum (RDTSegment seg) {
 		// TODO ***** compelte
 
+
 	}
 	
 	// for debugging
@@ -254,10 +271,10 @@ class ReceiverThread extends Thread {
 			receivedSegment.isValid();
 
 			if (receivedSegment.containsAck()) {
-				// remove waiting segments from sndBuf
+				// TODO remove segments waiting for ACK from sndBuf
 			} else if (receivedSegment.containsData()) {
-				//put data in rcvBuf
-				// send ack ?
+				// TODO put data in rcvBuf
+				// TODO send ack
 			}
 
 		}

@@ -15,7 +15,7 @@ public class RDTSegment {
 	public int ackNum;
 	public int flags;
 	public int checksum; 
-	public int rcvWin;
+	public int rcvWin; // number of bytes the sender has to hold response
 	public int length;  // number of data bytes (<= MSS)
 	public byte[] data;
 
@@ -47,21 +47,41 @@ public class RDTSegment {
 	
 	public boolean containsAck() {
 		// complete
-		return true;
+		return (ackNum != 0);
 	}
 	
 	public boolean containsData() {
 		// complete
-		return true;
+		return (seqNum != 0);
 	}
 
+	/**
+	 * Compute checksum, return 1's complement value
+	 * @return
+	 */
 	public int computeChecksum() {
-		// complete
-		return 0;
+		int sum = seqNum;
+		sum += ackNum;
+		sum += flags;
+		sum += rcvWin;
+		sum += length;
+
+		for (int i=0; i<length; i++) {
+			sum += data[i];
+		}
+
+		// return 1's complement of sum
+		return 0xFFFFFFF ^ sum;
 	}
+
+	/**
+	 * Computes checksum and verifies equivalence to saved checksum
+	 * @return
+	 */
 	public boolean isValid() {
-		// complete
-		return true;
+		// XOR 1's complement result to convert back to non-flipped, then add
+		// 1's complement checksum value
+		return ( (computeChecksum() ^ 0xFFFFFFF)  + checksum == 0xFFFFFFF);
 	}
 
 	/**
@@ -92,9 +112,10 @@ public class RDTSegment {
 		Utility.intToByte(rcvWin, payload, RCV_WIN_OFFSET);
 		Utility.intToByte(length, payload, LENGTH_OFFSET);
 		//add data
-		for (int i=0; i<length; i++)
+		for (int i=0; i<length; i++) {
 			// put data after all header info
-			payload[i+HDR_SIZE] = data[i];
+			payload[i + HDR_SIZE] = data[i];
+		}
 	}
 	
 	public void printHeader() {
