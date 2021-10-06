@@ -35,55 +35,63 @@ public class TestClient {
 			data[i] = 1;
 		seg2.fillData(data, 10);
 
-		RDTBuffer sndBuf = new RDTBuffer(4);
-		System.out.println("Enqueueing packets:");
-		sndBuf.dump();
-		sndBuf.putNext(seg);
-		sndBuf.dump();
-		sndBuf.putNext(seg2);
-		sndBuf.dump();
-
-		System.out.println("\nSending first packet");
-		sndBuf.getNextToSend();
-		sndBuf.dump();
-
-		System.out.println("\nSending second packet");
-		sndBuf.getNextToSend();
-		sndBuf.dump();
-
-		System.out.println("\nACK both packets");
-		RDTSegment ack = new RDTSegment();
-		ack.ackNum = 3;
-		ArrayList<RDTSegment> ALACK = sndBuf.ackSeqNum(ack);
-		sndBuf.dump();
-		System.out.println("\n" + ALACK.toString());
-
-		//test if buffer cycles around
-		System.out.println("\nInserting 3 packets");
 		RDTSegment seg3 = new RDTSegment();
 		seg3.seqNum = 3;
 		for (int i=0; i<10; i++)
 			data[i] = 1;
 		seg3.fillData(data, 10);
 
+		RDTSegment seg4 = new RDTSegment();
+		seg4.seqNum = 4;
+		for (int i=0; i<10; i++)
+			data[i] = 1;
+		seg4.fillData(data, 10);
+
+		RDTSegment seg5 = new RDTSegment();
+		seg5.seqNum = 5;
+		for (int i=0; i<10; i++)
+			data[i] = 1;
+		seg5.fillData(data, 10);
+
+		RDTBuffer sndBuf = new RDTBuffer(4);
+		System.out.println("Filling buffer:");
+		sndBuf.dump();
 		sndBuf.putNext(seg);
 		sndBuf.putNext(seg2);
 		sndBuf.putNext(seg3);
+		sndBuf.putNext(seg4);
 		sndBuf.dump();
 
-		System.out.println("\nSending first two packets");
-		sndBuf.getNextToSend();
-		sndBuf.dump();
+		System.out.println("\nSending packet 1:");
 		sndBuf.getNextToSend();
 		sndBuf.dump();
 
-		System.out.println("\nACK packets 1, 2");
-		ack.ackNum = 2;
-		ALACK.clear();
-		ALACK = sndBuf.ackSeqNum(ack);
+		System.out.println("\nSending packet 2:");
+		sndBuf.getNextToSend();
+		sndBuf.dump();
+
+		System.out.println("\nSending packet 3:");
+		sndBuf.getNextToSend();
+		sndBuf.dump();
+
+		System.out.println("\nSending packet 4:");
+		sndBuf.getNextToSend();
+		sndBuf.dump();
+
+		System.out.println("\nSending packet 5 - should fail:");
+		sndBuf.getNextToSend();
+		sndBuf.dump();
+
+		System.out.println("\nACK 3 packets");
+		RDTSegment ack = new RDTSegment();
+		ack.ackNum = 3;
+		ArrayList<RDTSegment> ALACK = sndBuf.ackSeqNum(ack);
 		sndBuf.dump();
 		System.out.println("\n" + ALACK.toString());
 
+		System.out.println("\nAdd packet 5 - should work:");
+		sndBuf.putNext(seg5);
+		sndBuf.dump();
 //		seg.checksum = seg.computeChecksum();
 //		System.out.println("Checksum: " + seg.checksum);
 //		System.out.println("Checksum result: " + seg.isValid());

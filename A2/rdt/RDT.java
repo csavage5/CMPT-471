@@ -223,6 +223,10 @@ class RDTBuffer {
 		RDTSegment seg = null;
 
 		// TODO case when nextToSend has sent last segment in window and is == to base (b/c of %)
+		if (nextToSend > base && nextToSend%size == base % size) {
+			// CASE: have reached end of window, all packets are sent
+			return null;
+		}
 
 		try {
 			semMutex.acquire(); // wait for buffer access
