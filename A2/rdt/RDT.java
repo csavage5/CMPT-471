@@ -92,7 +92,14 @@ public class RDT {
 	public static void setLossRate(double rate) {lossRate = rate;}
 	
 	// called by app
-	// returns total number of sent bytes  
+	// returns total number of sent bytes
+
+	/**
+	 * Interface for main() to call. Enqueues messages to send.
+	 * @param data Total data to enqueue
+	 * @param size Size of data array
+	 * @return total bytes sent
+	 */
 	public int send(byte[] data, int size) {
 		
 		//TODO ****** complete
@@ -132,7 +139,8 @@ public class RDT {
 		// mark as sent in buffer
 
 		// TODO schedule timeout for segment(s)
-			
+
+		// block here until all sent
 		return size;
 	}
 
@@ -168,8 +176,8 @@ class RDTBuffer {
 	public RDTSegment[] buf;
 	public int size;	
 	public int base; // leftmost in-flight segment
-	public int nextToSend;
-	public int nextFreeSlot; // next segment to send
+	public int nextToSend; // next segment to send
+	public int nextFreeSlot;
 	public Semaphore semMutex; // for mutual exclusion (mutex for buf)
 	public Semaphore semFull; // #of full slots
 	public Semaphore semEmpty; // #of Empty slots
@@ -185,12 +193,20 @@ class RDTBuffer {
 		semEmpty = new Semaphore(bufSize, true);
 	}
 
+	private RDTSegment getBuf(int index) {
+		return buf[index%size];
+	}
+
+	private void putBuf(int index, RDTSegment seg) {
+		buf[index%size] = seg;
+	}
+
 	// Put a segment in the next available slot in the buffer
 	public void putNext(RDTSegment seg) {
 		try {
 			semEmpty.acquire(); // wait for an empty slot 
 			semMutex.acquire(); // wait for buffer access
-				buf[nextFreeSlot % size] = seg; //save seg in slot nextAvailableSlot is at
+				buf[nextFreeSlot % size] = seg;
 				nextFreeSlot++;  // increment next, since this slot is full
 			semMutex.release();
 			semFull.release(); // increase #of full slots
@@ -200,19 +216,26 @@ class RDTBuffer {
 	}
 
 	/**
-	 * get the next in-order segment and increment NEXT cursor
-	 * @return Returns an RDTSegment if there's one queued, NULL if not
+	 * get the next in-order segment, moves NextToSend to next window slot
+	 * @return Returns an RDTSegment if there's one ready, NULL if not
 	 */
 	public RDTSegment getNextToSend() {
 		RDTSegment seg = null;
 
+		// TODO case when nextToSend has sent last segment in window and is == to base (b/c of %)
+
 		try {
 			semMutex.acquire(); // wait for buffer access
+
 			seg = buf[nextToSend % size]; // get segment at NEXT cursor
 
 			if (seg != null) {
-				// CASE: nextToSend was indexing a segment, not blank space
+				// CASE: nextToSend was indexing a segment, not blank space -
+				//        increment nextToSend
 				nextToSend++;
+			} else {
+				// CASE: nextToSend pointing to empty space
+				System.out.println("Buffer: can't get seg to send, none left");
 			}
 
 			semMutex.release();
@@ -222,7 +245,7 @@ class RDTBuffer {
 
 		return seg;
 	}
-	
+
 	// Put a segment in the *right* slot based on seg.seqNum
 	// used by receiver in Selective Repeat
 	public void putSeqNum (RDTSegment seg) {
@@ -231,8 +254,72 @@ class RDTBuffer {
 
 	}
 
-	public void ackSeqNum() {
-		// TODO - if ack == base: remove from buffer, increment full/empty semaphores
+	/**
+	 * Acknowledge matching packet(s) to this ackNumber
+	 * @param ackSeg
+	 * @return List of in-order segments that were removed from base
+	 */
+	public ArrayList<RDTSegment> ackSeqNum(RDTSegment ackSeg) {
+		// scan through and ACK all matching packets
+		// move base whenever base is ack'd
+		ArrayList<RDTSegment> ackdSegList = new ArrayList<>();
+		RDTSegment seg;
+
+		try {
+			semMutex.acquire();
+			for (int i = base; i < nextToSend; i++) {
+
+				seg = buf[i%size];
+				if (seg.seqNum <= ackSeg.ackNum) {
+					// CASE: seg should be acknowledged
+					seg.ackReceived = true;
+					if (i == base) {
+						System.out.println("found base");
+						// CASE: seg is acknowledged AND base - shift window
+						shiftWindow();
+						ackdSegList.add(seg);
+					}
+
+				}
+			}
+
+			semMutex.release();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+
+		return ackdSegList;
+
+	}
+
+	/**
+	 * Iterate base - MUST have already acquired mutex for buf[]
+	 * @return ack'd segment @ base if successful
+	 */
+	public RDTSegment shiftWindow() {
+		RDTSegment seg = null;
+
+		//verify base is ack'd
+		if (buf[base].ackReceived == false) {
+			System.out.println("Cannot shift base - base is unack'd");
+			return null;
+		}
+
+		//remove seg @ base
+		seg = buf[base%size];
+		buf[base%size] = null;
+		base++;
+
+		// increment SemEmpty, decrement SemFull
+		semEmpty.release();
+		try {
+			semFull.acquire();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+
+		return seg;
+
 	}
 	
 	// for debugging
@@ -241,16 +328,17 @@ class RDTBuffer {
 		// Complete, if you want to
 
 		System.out.println("Base: " + base + "; NextToSend: " + nextToSend + "; NextFreeSlot: " + nextFreeSlot);
-		for (int i = base; i < base + size; i++) {
+//		for (int i = base; i < base + size; i++) {
+		for (int i = 0; i < size; i++) {
 			if (buf[i] != null) {
-				System.out.print("[ SEG ]");
+				System.out.print("[ SEG " + buf[i].seqNum + " ]");
 			} else if (buf[i % size] == null) {
-				System.out.print("[     ]");
+				System.out.print("[       ]");
 			}
 
-			if (i == base) {System.out.print(" <-- BASE"); }
-			if (i == nextToSend) {System.out.print(" <-- NXTOSND"); }
-			if (i == nextFreeSlot) {System.out.print(" <-- NXFREESLT"); }
+			if (i == base%size) {System.out.print(" <-- BASE"); }
+			if (i == nextToSend%size) {System.out.print(" <-- NXTOSND"); }
+			if (i == nextFreeSlot%size) {System.out.print(" <-- NXFREESLT"); }
 
 			System.out.println();
 		}

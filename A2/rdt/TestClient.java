@@ -22,31 +22,67 @@ public class TestClient {
 	public static void TestFeature(){
 		// test checksum
 		RDTSegment seg = new RDTSegment();
+		seg.seqNum = 1;
 
 		byte[] data = new byte[10];
 		for (int i=0; i<10; i++)
 			data[i] = 1;
 		seg.fillData(data, 10);
 
-
 		RDTSegment seg2 = new RDTSegment();
+		seg2.seqNum = 2;
 		for (int i=0; i<10; i++)
 			data[i] = 1;
-		seg.fillData(data, 10);
+		seg2.fillData(data, 10);
 
-		RDTBuffer sndBuf = new RDTBuffer(3);
+		RDTBuffer sndBuf = new RDTBuffer(4);
+		System.out.println("Enqueueing packets:");
 		sndBuf.dump();
 		sndBuf.putNext(seg);
 		sndBuf.dump();
 		sndBuf.putNext(seg2);
 		sndBuf.dump();
 
+		System.out.println("\nSending first packet");
+		sndBuf.getNextToSend();
+		sndBuf.dump();
+
+		System.out.println("\nSending second packet");
+		sndBuf.getNextToSend();
+		sndBuf.dump();
+
+		System.out.println("\nACK both packets");
+		RDTSegment ack = new RDTSegment();
+		ack.ackNum = 3;
+		ArrayList<RDTSegment> ALACK = sndBuf.ackSeqNum(ack);
+		sndBuf.dump();
+		System.out.println("\n" + ALACK.toString());
+
+		//test if buffer cycles around
+		System.out.println("\nInserting 3 packets");
+		RDTSegment seg3 = new RDTSegment();
+		seg3.seqNum = 3;
+		for (int i=0; i<10; i++)
+			data[i] = 1;
+		seg3.fillData(data, 10);
+
+		sndBuf.putNext(seg);
+		sndBuf.putNext(seg2);
+		sndBuf.putNext(seg3);
+		sndBuf.dump();
+
+		System.out.println("\nSending first two packets");
 		sndBuf.getNextToSend();
 		sndBuf.dump();
 		sndBuf.getNextToSend();
 		sndBuf.dump();
-		sndBuf.getNextToSend();
+
+		System.out.println("\nACK packets 1, 2");
+		ack.ackNum = 2;
+		ALACK.clear();
+		ALACK = sndBuf.ackSeqNum(ack);
 		sndBuf.dump();
+		System.out.println("\n" + ALACK.toString());
 
 //		seg.checksum = seg.computeChecksum();
 //		System.out.println("Checksum: " + seg.checksum);
