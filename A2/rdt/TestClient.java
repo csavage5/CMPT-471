@@ -18,9 +18,6 @@ public class TestClient {
 
 	}
 
-	/**
-	 * @param args
-	 */
 
 	public static void TestFeature(){
 		// test checksum
@@ -31,9 +28,29 @@ public class TestClient {
 			data[i] = 1;
 		seg.fillData(data, 10);
 
-		seg.checksum = seg.computeChecksum();
-		System.out.println("Checksum: ");
-		System.out.println("Checksum result: " + seg.isValid());
+
+		RDTSegment seg2 = new RDTSegment();
+		for (int i=0; i<10; i++)
+			data[i] = 1;
+		seg.fillData(data, 10);
+
+		RDTBuffer sndBuf = new RDTBuffer(3);
+		sndBuf.dump();
+		sndBuf.putNext(seg);
+		sndBuf.dump();
+		sndBuf.putNext(seg2);
+		sndBuf.dump();
+
+		sndBuf.getNextToSend();
+		sndBuf.dump();
+		sndBuf.getNextToSend();
+		sndBuf.dump();
+		sndBuf.getNextToSend();
+		sndBuf.dump();
+
+//		seg.checksum = seg.computeChecksum();
+//		System.out.println("Checksum: " + seg.checksum);
+//		System.out.println("Checksum result: " + seg.isValid());
 	}
 
 	public static void main(String[] args) {
