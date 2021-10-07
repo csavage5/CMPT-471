@@ -122,6 +122,17 @@ public class RDT {
 			index += size - index;
 		}
 
+
+		// TODO start up sender thread
+		Semaphore sem = new Semaphore(1, true);
+		SenderThread sndThread = new SenderThread(rcvBuf, sndBuf, socket, dst_ip, dst_port, sem);
+		// split enqueuing and sending into separate threads?
+			// one keeps putting into buffer until no segments left,
+		// other waits on buffer and sends a certain number of times,
+			// then returns to block this level
+		// what if too many segments for the buffer? will get stuck waiting
+			// for an opening, but will never come because it isn't sending anything
+
 		// put each segment into sndBuf
 		for (RDTSegment rdtSeg:segments) {
 			// TODO - modify flags for segment
@@ -129,16 +140,9 @@ public class RDT {
 			rdtSeg.checksum = rdtSeg.computeChecksum();
 			rdtSeg.rcvWin = rcvBuf.size;
 			sndBuf.putNext(rdtSeg);
-			increaseSeqNum(rdtSeg.length);
+			increaseSeqNum();
 		}
 
-
-		// TODO send using udp_send()
-		//sndBuf.sendAllNewSegments();
-		//Utility.udp_send(segment, socket, dst_ip, dst_port);
-		// mark as sent in buffer
-
-		// TODO schedule timeout for segment(s)
 
 		// block here until all sent
 		return size;
@@ -148,8 +152,9 @@ public class RDT {
 	 * Increments RDT.seqNum and returns it
 	 * @return
 	 */
-	public void increaseSeqNum(int bytes) {
-		seqNum += bytes;
+	public void increaseSeqNum() {
+		//seqNum += bytes;
+		seqNum += 1;
 	}
 	
 	// called by app
@@ -171,6 +176,45 @@ public class RDT {
 	
 }  // end RDT class 
 
+class SenderThread extends Thread {
+
+	RDTBuffer rcvBuf, sndBuf;
+	DatagramSocket socket;
+	InetAddress dst_ip;
+	int dst_port;
+	Semaphore semThreadKillCondition;
+
+	SenderThread(RDTBuffer _rcv_buf, RDTBuffer _snd_buf, DatagramSocket _socket,
+				 InetAddress _dst_ip, int _dst_port, Semaphore sem) {
+
+		rcvBuf = _rcv_buf;
+		sndBuf = _snd_buf;
+		socket = _socket;
+		dst_ip = _dst_ip;
+		dst_port = _dst_port;
+		semThreadKillCondition = sem;
+	}
+
+	public void run() {
+		RDTSegment seg;
+
+		while(semThreadKillCondition.availablePermits() == 1) {
+			// CASE: RDT.send() hasn't sent the kill condition yet, so
+			// 		it still has more data to enqueue
+
+			seg = sndBuf.getNextToSend();
+
+			if (seg != null) {
+				Utility.udp_send(seg, socket, dst_ip, dst_port);
+			}
+
+			// TODO schedule timeout for segment(s)
+
+		}
+
+	}
+
+}
 
 class RDTBuffer {
 	public RDTSegment[] buf;
@@ -260,8 +304,8 @@ class RDTBuffer {
 
 	/**
 	 * Acknowledge matching packet(s) to this ackNumber
-	 * @param ackSeg
-	 * @return List of in-order segments that were removed from base
+	 * @param ackSeg Received Acknowledgement segment
+	 * @return ArrayList of in-order segments that were removed from base
 	 */
 	public ArrayList<RDTSegment> ackSeqNum(RDTSegment ackSeg) {
 		// scan through and ACK all matching packets
@@ -305,7 +349,7 @@ class RDTBuffer {
 
 		//verify base is ack'd
 		if (buf[base].ackReceived == false) {
-			System.out.println("Cannot shift base - base is unack'd");
+			System.out.println("RDTBuffer: cannot shift base - base is unack'd");
 			return null;
 		}
 
@@ -352,7 +396,6 @@ class RDTBuffer {
 } // end RDTBuffer class
 
 
-
 class ReceiverThread extends Thread {
 
 	RDTBuffer rcvBuf, sndBuf;
@@ -396,14 +439,23 @@ class ReceiverThread extends Thread {
 			makeSegment(receivedSegment, packet.getData());
 
 			//verify receivedSegment checksum
-			receivedSegment.isValid();
+			if (!receivedSegment.isValid()) {
+				// CASE: packet was corrupted, drop it
+				continue;
+			}
 
 			if (receivedSegment.containsAck()) {
-				// TODO remove segments waiting for ACK from sndBuf
+				// CASE: packet is an ACK; remove matching segments
+				// 		 waiting for ACK from sndBuf
+				sndBuf.ackSeqNum(receivedSegment);
+
 			} else if (receivedSegment.containsData()) {
 				// TODO put data in rcvBuf
 				//rcvBuf.
 				// TODO send ack
+				RDTSegment segment = new RDTSegment();
+				//segment.ackNum = // TODO
+				sndBuf.putNext(segment);
 			}
 
 		}
@@ -411,7 +463,13 @@ class ReceiverThread extends Thread {
 	}
 	
 	
-	//	 create a segment from received bytes
+	//
+
+	/**
+	 * Create a segment from received bytes
+	 * @param seg
+	 * @param payload
+	 */
 	void makeSegment(RDTSegment seg, byte[] payload) {
 	
 		seg.seqNum = Utility.byteToInt(payload, RDTSegment.SEQ_NUM_OFFSET);

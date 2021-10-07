@@ -46,12 +46,10 @@ public class RDTSegment {
 	}
 	
 	public boolean containsAck() {
-		// complete
 		return (ackNum != 0);
 	}
 	
 	public boolean containsData() {
-		// complete
 		return (seqNum != 0);
 	}
 
