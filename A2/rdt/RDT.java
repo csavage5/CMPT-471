@@ -402,6 +402,10 @@ class ReceiverThread extends Thread {
 	DatagramSocket socket;
 	InetAddress dst_ip;
 	int dst_port;
+
+	//GBN variables
+	int lastReceivedSegment = 1;
+
 	
 	ReceiverThread (RDTBuffer rcv_buf, RDTBuffer snd_buf, DatagramSocket s, 
 			InetAddress dst_ip_, int dst_port_) {
@@ -438,24 +442,38 @@ class ReceiverThread extends Thread {
 			RDTSegment receivedSegment = new RDTSegment();
 			makeSegment(receivedSegment, packet.getData());
 
-			//verify receivedSegment checksum
 			if (!receivedSegment.isValid()) {
 				// CASE: packet was corrupted, drop it
 				continue;
 			}
 
 			if (receivedSegment.containsAck()) {
-				// CASE: packet is an ACK; remove matching segments
-				// 		 waiting for ACK from sndBuf
+				// CASE: packet is an ACK; remove matching
+				// 		 segments waiting for ACK from sndBuf
 				sndBuf.ackSeqNum(receivedSegment);
 
 			} else if (receivedSegment.containsData()) {
-				// TODO put data in rcvBuf
-				//rcvBuf.
-				// TODO send ack
-				RDTSegment segment = new RDTSegment();
-				//segment.ackNum = // TODO
-				sndBuf.putNext(segment);
+				// CASE: packet is data segment, verify it's
+				// 		 received in-order
+
+				if (receivedSegment.seqNum < lastReceivedSegment ||
+						receivedSegment.seqNum >= lastReceivedSegment + 2) {
+					// CASE: packet is out-of-order, drop
+					continue;
+				}
+
+				if (receivedSegment.seqNum == lastReceivedSegment + 1) {
+					// CASE: packet is not a duplicate, place in rcvBuf
+					rcvBuf.putNext(receivedSegment);
+					lastReceivedSegment += 1;
+				}
+
+				// CASE: packet is either duplicate or
+				// 		 in-order, send ACK
+				RDTSegment ackSegment = new RDTSegment();
+				ackSegment.ackNum = receivedSegment.seqNum;
+				sndBuf.putNext(ackSegment);
+
 			}
 
 		}
