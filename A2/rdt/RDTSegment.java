@@ -81,7 +81,7 @@ public class RDTSegment {
 		// XOR 1's complement result to convert back to non-flipped, then add
 		// 1's complement checksum value
 
-		System.out.println("[RDTSegment] checksum result: " + (~computeChecksum())  + checksum);
+		//System.out.println("[RDTSegment] checksum result: " + (~computeChecksum())  + checksum);
 
 		return ( ~computeChecksum()  + checksum == 0);
 	}
