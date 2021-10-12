@@ -58,6 +58,7 @@ public class RDTSegment {
 	 * @return
 	 */
 	public int computeChecksum() {
+		// header
 		int sum = seqNum;
 		sum += ackNum;
 		sum += flags;
@@ -69,7 +70,7 @@ public class RDTSegment {
 		}
 
 		// return 1's complement of sum
-		return 0xFFFFFFF ^ sum;
+		return ~sum;
 	}
 
 	/**
@@ -79,7 +80,10 @@ public class RDTSegment {
 	public boolean isValid() {
 		// XOR 1's complement result to convert back to non-flipped, then add
 		// 1's complement checksum value
-		return ( (computeChecksum() ^ 0xFFFFFFF)  + checksum == 0xFFFFFFF);
+
+		System.out.println("[RDTSegment] checksum result: " + (~computeChecksum())  + checksum);
+
+		return ( ~computeChecksum()  + checksum == 0);
 	}
 
 	/**
@@ -92,8 +96,9 @@ public class RDTSegment {
 			System.out.printf("Error: segment cannot hold %d bytes of data\n", _size);
 			// TODO add throw?
 		}
-
-		data = _data;
+		if (_size >= 0) {
+			System.arraycopy(_data, 0, data, 0, _size);
+		}
 		length = _size;
 	}
 
@@ -115,7 +120,21 @@ public class RDTSegment {
 			payload[i + HDR_SIZE] = data[i];
 		}
 	}
-	
+
+	/**
+	 * Begin timer after segment is sent
+	 */
+	public void startTimer(){
+
+	}
+
+	/**
+	 * Stop timer if sent before timeout occurs
+	 */
+	public void stopTimer() {
+
+	}
+
 	public void printHeader() {
 		System.out.println("SeqNum: " + seqNum);
 		System.out.println("ackNum: " + ackNum);
