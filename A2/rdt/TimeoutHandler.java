@@ -33,10 +33,10 @@ class TimeoutHandler extends TimerTask {
 		// complete 
 		switch(RDT.protocol){
 			case RDT.GBN:
-				
+				// move sndBuf.next to base, restart timer
 				break;
 			case RDT.SR:
-				
+				// re-send packet with Utility.udpsend, restart timer
 				break;
 			default:
 				System.out.println("Error in TimeoutHandler:run(): unknown protocol");

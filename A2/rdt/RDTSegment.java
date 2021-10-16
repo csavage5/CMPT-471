@@ -9,18 +9,21 @@ package rdt;
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.util.zip.CRC32;
 
 public class RDTSegment {
 	public int seqNum;
 	public int ackNum;
 	public int flags;
-	public int checksum; 
+	public int checksum;
 	public int rcvWin; // number of bytes the sender has to hold response
 	public int length;  // number of data bytes (<= MSS)
 	public byte[] data;
 
 	public boolean ackReceived;
-	
+
+	private int seed = 471;
+
 	public TimeoutHandler timeoutHandler;  // make it for every segment, 
 	                                       // will be used in selective repeat
 	
@@ -58,19 +61,59 @@ public class RDTSegment {
 	 * @return
 	 */
 	public int computeChecksum() {
-		// header
-		int sum = seqNum;
-		sum += ackNum;
-		sum += flags;
-		sum += rcvWin;
-		sum += length;
+//		CRC32 crc32 = new CRC32();
+//
+//		byte[] bytes = new byte[HDR_SIZE + length];
+//		makePayload(bytes);
+//
+//		//crc32.reset();
+//		crc32.update(0); // give consistent initial value
+//		crc32.update(bytes, 0, HDR_SIZE + length);
 
-		for (int i=0; i<length; i++) {
-			sum += data[i];
+//		crc32.update(seqNum);
+//		crc32.update(ackNum);
+//		crc32.update(flags);
+//		crc32.update(rcvWin);
+//		crc32.update(length);
+//		crc32.update(data);
+		// header
+		int sum = (seqNum & 0xFFFF0000 >> 16) + (seqNum & ~0xFFFF0000); // add upper and lower 16 bits together
+		sum += (ackNum & 0xFFFF0000 >> 16) + (ackNum & ~0xFFFF0000);
+		sum += (flags & 0xFFFF0000 >> 16) + (flags & ~0xFFFF0000);
+		sum += (rcvWin & 0xFFFF0000 >> 16) + (rcvWin & ~0xFFFF0000);
+		sum += (length & 0xFFFF0000 >> 16) + (length & ~0xFFFF0000);
+
+		// data
+		for (int i = 0; i+1 < length; i+=2) {
+			sum += (data[i] << 8) + data[i+1];
 		}
 
+
+		// header
+//		int sum = seqNum;
+//		sum += ackNum;
+//		sum += flags;
+//		sum += rcvWin;
+//		sum += length;
+//
+//		for (int i=0; i<length; i++) {
+//			sum += data[i];
+//		}
+
 		// return 1's complement of sum
-		return ~sum;
+
+
+		/*
+		System.out.println("Checksum value: " + crc32.getValue());
+		System.out.println("Checksum value after bitshift: " + (crc32.getValue() >> 16));
+		System.out.println("Bitshift Checksum value after cast: " + (int) (crc32.getValue() >> 16));
+		*/
+		// shift it down 16 bits to get a 16 bit checksum
+		// avoids issues with negative numbers
+		//int result = (int) (crc32.getValue() >>> 16);
+		//result &= ~0xFFFF0000; // clear upper 16 bits
+		//crc32.reset();
+		return sum & ~0xFFFF0000;
 	}
 
 	/**
@@ -82,8 +125,16 @@ public class RDTSegment {
 		// 1's complement checksum value
 
 		//System.out.println("[RDTSegment] checksum result: " + (~computeChecksum())  + checksum);
+//		System.out.println("Packet SEG " + this.seqNum + " ACK " + this.ackNum  + "checksum: \n" +
+//				"computeChecksum: " + this.computeChecksum() + "\n" +
+//				"~computeChecksum: " + ~this.computeChecksum() + "\n" +
+//				"checksum: " + this.checksum + "\n" +
+//				"isValid: " + ~computeChecksum()  + checksum + "\n");
 
-		return ( ~computeChecksum()  + checksum == 0);
+		System.out.println("Packet SEG " + this.seqNum + " ACK " + this.ackNum  + " checksum: \n" +
+				"computeChecksum: " + this.computeChecksum() + "\n" +
+				"checksum: " + this.checksum + "\n");
+		return checksum == computeChecksum();
 	}
 
 	/**

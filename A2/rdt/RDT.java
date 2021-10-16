@@ -220,6 +220,9 @@ class SenderThread extends Thread {
 			seg = sndBuf.getNext();
 
 			if (seg != null) {
+				seg.printHeader();
+				seg.printData();
+
 				Utility.udp_send(seg, socket, dst_ip, dst_port);
 				System.out.println("[SenderThread] sent UDP packet");
 				sndBuf.dump();
@@ -242,12 +245,15 @@ class RDTBuffer {
 	public int base; // leftmost in-flight segment
 	public int next; // next segment to send
 	public int nextFreeSlot;
-	public Semaphore semBaseAck; // indicates that buf[base] is ack'd
+	public Semaphore semNextFull; // next is pointing to non-null segment
 	public Semaphore semFull; // #of full slots
 	public Semaphore semEmpty; // #of Empty slots
 
 	public final Object mutBaseAck = new Object(); // wait on this for base to be acknowledged
 	public boolean condBaseAck = false;
+
+	public final Object mutNextNull = new Object(); // wait on this for base to be acknowledged
+	public boolean condNextNotNull = false;
 
 	public final Object mutBufAccess = new Object(); // mutex for access to buf[]
 	
@@ -257,7 +263,7 @@ class RDTBuffer {
 			buf[i] = null;
 		size = bufSize;
 		base = nextFreeSlot = next = 0;
-		semBaseAck = new Semaphore(1, true);
+		semNextFull = new Semaphore(1, true);
 		semFull =  new Semaphore(0, true);
 		semEmpty = new Semaphore(bufSize, true);
 
@@ -267,19 +273,17 @@ class RDTBuffer {
 		return buf[index%size];
 	}
 
-	private void putBuf(int index, RDTSegment seg) {
+	private void setBuf(int index, RDTSegment seg) {
 		buf[index%size] = seg;
 	}
 
 	// Put a segment in the next available slot in the buffer
 	public void putNext(RDTSegment seg) {
 
-		//boolean baseAck = false;
-
 		synchronized (mutBufAccess) {
 			try {
 				semEmpty.acquire(); // wait for an empty slot
-				putBuf(nextFreeSlot, seg);
+				setBuf(nextFreeSlot, seg);
 
 				nextFreeSlot++;  // increment nextFreeSlot, since this slot is full
 				semFull.release(); // increase #of full slots
@@ -291,8 +295,15 @@ class RDTBuffer {
 
 		}
 
+		synchronized (mutNextNull) {
+			condNextNotNull = true;
+			mutNextNull.notifyAll();
+		}
 
-		dump();
+//		if (semNextFull.availablePermits() < 1) {
+//			semNextFull.release();
+//		}
+
 	}
 
 	/**
@@ -302,23 +313,43 @@ class RDTBuffer {
 	public RDTSegment getNext() {
 		RDTSegment seg;
 
+		// get segment at NEXT cursor
 		synchronized (mutBufAccess) {
-			seg = getBuf(next); // get segment at NEXT cursor
+			seg = getBuf(next);
 
-			if ( (next > base) && (next % size == base % size) ) {
+			if ((next > base) && (next % size == base % size)) {
 				// CASE: have reached end of window, all packets are sent
 				seg = null;
 			}
+		}
 
-			if (seg != null) {
-				// CASE: next was indexing a segment, not blank space -
-				//        increment next
+		if (seg == null) {
+			// CASE: nothing to get, wait for new segment
+			synchronized (mutNextNull) {
+				condNextNotNull = false;
+				while (!condNextNotNull) {
+					try {
+						mutNextNull.wait();
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+				}
+			}
+
+			synchronized (mutBufAccess) {
+				seg = getBuf(next);
+			}
+		}
+
+		if (seg != null) {
+			// CASE: next was indexing a segment, not blank space -
+			//        increment next
+			synchronized (mutBufAccess){
 				next++;
+			}
 
-			} //else {
-			// CASE: next pointing to empty space
-			//System.out.println("Buffer: can't get segment, none left");
-			//}
+			// TODO if next == base, start timer
+
 		}
 
 		return seg;
@@ -414,8 +445,10 @@ class RDTBuffer {
 			}
 
 			// replace base with null, increment
-			putBuf(base, null);
+			setBuf(base, null);
 			base++;
+
+			// TODO if next > base, start new base's timer 
 
 		}
 
@@ -433,6 +466,10 @@ class RDTBuffer {
 
 	}
 
+	/**
+	 * Checks the ack status of buf[base]
+	 * @return TRUE if base is ack'd, FALSE if not
+	 */
 	public boolean checkForBaseAck() {
 		boolean result = false;
 		synchronized (mutBufAccess) {
@@ -444,6 +481,10 @@ class RDTBuffer {
 		return result;
 	}
 
+	/**
+	 * When segment at BASE is ack'd, wake up thread waiting
+	 * for a segment to receive in the application layer
+	 */
 	public void notifyThreadOnReceiveBase() {
 		synchronized (mutBaseAck) {
 			condBaseAck = true;
@@ -532,9 +573,11 @@ class ReceiverThread extends Thread {
 			receivedSegment.printHeader();
 			receivedSegment.printData();
 
-			if (false){ //!receivedSegment.isValid()) {
+			if (!receivedSegment.isValid()) {
 				// CASE: packet was corrupted, drop it
 				System.out.println("[ReceiverThread] dropped corrupted packet.");
+				receivedSegment.printHeader();
+				receivedSegment.printData();
 				continue;
 			}
 
@@ -587,7 +630,10 @@ class ReceiverThread extends Thread {
 				System.out.println("[ReceiverThread] sending ACK for SEG " + lastReceivedSegment);
 				RDTSegment ackSegment = new RDTSegment();
 				ackSegment.ackNum = lastReceivedSegment;
-				ackSegment.seqNum = 0;
+				ackSegment.checksum = ackSegment.computeChecksum();
+				System.out.println("[ReceiverThread] checksum for ACK " + lastReceivedSegment + ": " +
+						ackSegment.checksum);
+
 
 				Utility.udp_send(ackSegment, socket, dst_ip, dst_port);
 
