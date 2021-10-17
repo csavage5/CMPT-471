@@ -12,6 +12,20 @@ import java.util.*;
 public class Utility {
 	
 	public static final int MAX_NETWORK_DELAY = 200; // msec
+
+	DatagramSocket socket;
+	InetAddress ip;
+	int port;
+
+	Utility(DatagramSocket _socket, InetAddress _ip, int _port){
+		socket = _socket;
+		ip = _ip;
+		port = _port;
+	}
+
+	public void udp_send(RDTSegment seg) {
+		udp_send(seg, socket, ip, port);
+	}
 	
 	public static void udp_send (RDTSegment seg, DatagramSocket socket, 
 			InetAddress ip, int port) {

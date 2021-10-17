@@ -25,7 +25,9 @@ public class RDT {
 	public static double lossRate = 0.0;
 	public static Random random = new Random(); 
 	public static Timer timer = new Timer();	
-	
+
+	private Utility utility;
+
 	private DatagramSocket socket; 
 	private InetAddress dst_ip;
 	private int dst_port;
@@ -46,21 +48,7 @@ public class RDT {
 	 * @param local_port_
 	 */
 	RDT (String dst_hostname_, int dst_port_, int local_port_) {
-		local_port = local_port_;
-		dst_port = dst_port_; 
-		try {
-			 socket = new DatagramSocket(local_port);
-			 dst_ip = InetAddress.getByName(dst_hostname_);
-		 } catch (IOException e) {
-			 System.out.println("RDT constructor: " + e);
-		 }
-		sndBuf = new RDTBuffer(MAX_BUF_SIZE);
-		if (protocol == GBN)
-			rcvBuf = new RDTBuffer(1);
-		else 
-			rcvBuf = new RDTBuffer(MAX_BUF_SIZE);
-		rcvThread = new ReceiverThread(rcvBuf, sndBuf, socket, dst_ip, dst_port);
-		rcvThread.start();
+		this(dst_hostname_, dst_port_, local_port_, MAX_BUF_SIZE, 1);
 	}
 
 	/**
@@ -72,6 +60,7 @@ public class RDT {
 	 * @param rcvBufSize
 	 */
 	RDT (String dst_hostname_, int dst_port_, int local_port_, int sndBufSize, int rcvBufSize) {
+
 		local_port = local_port_;
 		dst_port = dst_port_;
 		 try {
@@ -87,13 +76,15 @@ public class RDT {
 			rcvBuf = new RDTBuffer(1);
 		else 
 			rcvBuf = new RDTBuffer(rcvBufSize);
-		
+
+		utility = new Utility(socket, dst_ip, dst_port);
+
+		// start up receiver thread
 		rcvThread = new ReceiverThread(rcvBuf, sndBuf, socket, dst_ip, dst_port);
 		rcvThread.start();
 
 		// start up sender thread
-		Semaphore sigDoneEnqueing = new Semaphore(1, true);
-		sndThread = new SenderThread(rcvBuf, sndBuf, socket, dst_ip, dst_port, sigDoneEnqueing);
+		sndThread = new SenderThread(rcvBuf, sndBuf, socket, dst_ip, dst_port);
 		sndThread.start();
 	}
 	
@@ -109,9 +100,7 @@ public class RDT {
 	 * @return total bytes sent
 	 */
 	public int send(byte[] data, int size) {
-		
-		//TODO ****** complete
-		
+		RDTSegment seg;
 		// divide data into segments
 		int index = 0;
 		ArrayList<RDTSegment> segments = new ArrayList<>();
@@ -125,19 +114,15 @@ public class RDT {
 
 		if (index < size - 1) {
 			// CASE: have left over data < MSS that needs to be sent
-			segments.add(new RDTSegment());
+			seg = new RDTSegment();
+			// give segment instance of utility and sendBuf to give to interal timeoutHandler
+			seg.utility = utility;
+			seg.sndBuf = sndBuf;
+
+			segments.add(seg);
 			segments.get(segments.size()-1).fillData(Arrays.copyOfRange(data, index, size - 1), size - 1 - index);
 			index += size - index;
 		}
-
-
-
-		// split enqueuing and sending into separate threads?
-			// one keeps putting into buffer until no segments left,
-			// other waits on buffer and sends a certain number of times,
-			// then returns to block this level
-		// what if too many segments for the buffer? will get stuck waiting
-			// for an opening, but will never come because it isn't sending anything
 
 		// enqueue segments into sndBuf
 		for (RDTSegment rdtSeg:segments) {
@@ -192,17 +177,15 @@ class SenderThread extends Thread {
 	DatagramSocket socket;
 	InetAddress dst_ip;
 	int dst_port;
-	Semaphore semThreadKillCondition;
 
 	SenderThread(RDTBuffer _rcv_buf, RDTBuffer _snd_buf, DatagramSocket _socket,
-				 InetAddress _dst_ip, int _dst_port, Semaphore sem) {
+				 InetAddress _dst_ip, int _dst_port) {
 
 		rcvBuf = _rcv_buf;
 		sndBuf = _snd_buf;
 		socket = _socket;
 		dst_ip = _dst_ip;
 		dst_port = _dst_port;
-		semThreadKillCondition = sem;
 	}
 
 	public void run() {
@@ -228,10 +211,6 @@ class SenderThread extends Thread {
 				sndBuf.dump();
 			}
 
-			// TODO schedule timeout for segment(s)
-			//RDT.timer.schedule(new TimeoutHandler(sndBuf, seg), RDT.RTO);
-			// TODO when timer expires, move sndBuf.next to
-			//  base (GBN)
 
 		}
 
@@ -300,10 +279,6 @@ class RDTBuffer {
 			mutNextNull.notifyAll();
 		}
 
-//		if (semNextFull.availablePermits() < 1) {
-//			semNextFull.release();
-//		}
-
 	}
 
 	/**
@@ -345,22 +320,72 @@ class RDTBuffer {
 			// CASE: next was indexing a segment, not blank space -
 			//        increment next
 			synchronized (mutBufAccess){
+				if (next == base && RDT.protocol == RDT.GBN || RDT.protocol == RDT.SR) {
+					// CASE: GBN: seg is base, start timer
+					//		 SR: start timer for every segment
+					seg.startTimer();
+				}
+
 				next++;
 			}
-
-			// TODO if next == base, start timer
 
 		}
 
 		return seg;
 	}
 
-	// Put a segment in the *right* slot based on seg.seqNum
-	// used by receiver in Selective Repeat
+	/**
+	 * [SR] Put a segment in the *right* slot based on seg.seqNum
+	 * For rcvBuf
+	 * @param seg
+	 */
 	public void putSeqNum (RDTSegment seg) {
 		// TODO ***** complete
 
+		synchronized (mutBufAccess) {
 
+			if (seg.seqNum-1 < base || seg.seqNum-1 > base + (size - 1)) {
+				// CASE: can't add packet to rcvBuffer, not within window
+
+			}
+
+			if (getBuf(seg.seqNum-1) == null) {
+				// CASE: buffer slot is empty, put in
+				setBuf(seg.seqNum-1, seg);
+			}
+
+		}
+
+		// seg.seqNum-1 must be between [base, base + size - 1] (seq starts at 1, base/next start at 0)
+
+
+		// getBuf[seg.SeqNum-1] == null
+		// caller must also call check for baseACK - if it's at base,
+	}
+
+	/**
+	 * [GBN] Reset NEXT to BASE
+	 * called from TimeoutHandler when timer expires
+	 */
+	public void GoBackN() {
+		synchronized (mutBufAccess) {
+			RDTSegment baseSeg = getBuf(base);
+
+			if (baseSeg != null) {
+				next = base;
+
+				// notify any waiting threads that next points to a
+				// not-null segment
+				synchronized (mutNextNull) {
+					condNextNotNull = true;
+					mutNextNull.notifyAll();
+				}
+
+			}
+
+		}
+
+		System.out.println("[RDTBuffer] GBN: moved NEXT back to BASE.");
 	}
 
 	/**
@@ -391,8 +416,6 @@ class RDTBuffer {
 	}
 
 	public RDTSegment receiveBase() {
-		// wait for data in the buffer
-		// TODO verify BASE is ack'd before taking it out of buffer
 
 		RDTSegment seg = null;
 		boolean baseAck = false;
@@ -427,7 +450,7 @@ class RDTBuffer {
 
 	}
 	/**
-	 * Attempt to shift window - keep calling until null if need to shift multiple times
+	 * Attempt to shift window - keep calling until null if multiple shifts are necessary
 	 * @return ack'd segment @ base if successful, null if not
 	 */
 	public RDTSegment shiftWindow() {
@@ -446,9 +469,18 @@ class RDTBuffer {
 
 			// replace base with null, increment
 			setBuf(base, null);
+
+			if (base == next) {
+				next++;
+			}
+
 			base++;
 
-			// TODO if next > base, start new base's timer 
+			if (next > base && getBuf(base) != null) {
+				// CASE: have sent segments further in the buffer,
+				// start timer on new base
+				getBuf(base).startTimer();
+			}
 
 		}
 
@@ -460,8 +492,6 @@ class RDTBuffer {
 			e.printStackTrace();
 		}
 		System.out.println("[RDTBuffer] shifted window.");
-		dump();
-
 		return seg;
 
 	}
@@ -542,9 +572,8 @@ class ReceiverThread extends Thread {
 	}
 
 	public void run() {
-		
-		// TODO *** complete
-		// Essentially:  while(cond==true){  // may loop for ever if you will not implement RDT::close()  
+
+		// Essentially:  while(cond==true){  // may loop forever if you don't implement RDT::close()
 		//                socket.receive(pkt)
 		//                seg = make a segment from the pkt
 		//                verify checksum of seg
@@ -576,8 +605,7 @@ class ReceiverThread extends Thread {
 			if (!receivedSegment.isValid()) {
 				// CASE: packet was corrupted, drop it
 				System.out.println("[ReceiverThread] dropped corrupted packet.");
-				receivedSegment.printHeader();
-				receivedSegment.printData();
+				receivedSegment.dump();
 				continue;
 			}
 

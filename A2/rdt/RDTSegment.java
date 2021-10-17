@@ -24,6 +24,9 @@ public class RDTSegment {
 
 	private int seed = 471;
 
+	public final Timer timer = new Timer();
+	public Utility utility;
+	public RDTBuffer sndBuf;
 	public TimeoutHandler timeoutHandler;  // make it for every segment, 
 	                                       // will be used in selective repeat
 	
@@ -76,16 +79,17 @@ public class RDTSegment {
 //		crc32.update(rcvWin);
 //		crc32.update(length);
 //		crc32.update(data);
+
 		// header
-		int sum = (seqNum & 0xFFFF0000 >> 16) + (seqNum & ~0xFFFF0000); // add upper and lower 16 bits together
-		sum += (ackNum & 0xFFFF0000 >> 16) + (ackNum & ~0xFFFF0000);
-		sum += (flags & 0xFFFF0000 >> 16) + (flags & ~0xFFFF0000);
-		sum += (rcvWin & 0xFFFF0000 >> 16) + (rcvWin & ~0xFFFF0000);
-		sum += (length & 0xFFFF0000 >> 16) + (length & ~0xFFFF0000);
+		int sum = (seqNum & 0x000000FF); // take lowest 8 bits
+		sum += ackNum & 0x000000FF;
+		sum += flags & 0x000000FF;
+		sum += rcvWin & 0x000000FF;
+		sum += length & 0x000000FF;
 
 		// data
 		for (int i = 0; i+1 < length; i+=2) {
-			sum += (data[i] << 8) + data[i+1];
+			sum += data[i] & 0x000000FF;
 		}
 
 
@@ -113,7 +117,7 @@ public class RDTSegment {
 		//int result = (int) (crc32.getValue() >>> 16);
 		//result &= ~0xFFFF0000; // clear upper 16 bits
 		//crc32.reset();
-		return sum & ~0xFFFF0000;
+		return sum & 0x000000FF;
 	}
 
 	/**
@@ -176,14 +180,15 @@ public class RDTSegment {
 	 * Begin timer after segment is sent
 	 */
 	public void startTimer(){
-
+		timeoutHandler = new TimeoutHandler(sndBuf, utility, this);
+		this.timer.schedule(this.timeoutHandler, RDT.RTO);
 	}
 
 	/**
-	 * Stop timer if sent before timeout occurs
+	 * Stop timer if ACK received before timeout occurs
 	 */
 	public void stopTimer() {
-
+		this.timer.cancel();
 	}
 
 	public void printHeader() {
