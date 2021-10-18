@@ -81,7 +81,7 @@ public class RDTSegment {
 			//System.out.println("[RDTSegment] computeChecksum: add data[" + i + "] = " + data[i] + "; sum = " + sum);
 		}
 
-		System.out.println("[RDTSegment] computeChecksum = " + (sum & 0x000000FF) );
+		//System.out.println("[RDTSegment] computeChecksum = " + (sum & 0x000000FF) );
 		return ~sum & 0x000000FF;
 	}
 

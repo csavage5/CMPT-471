@@ -51,7 +51,7 @@ public class TestClient {
 			data[i] = 1;
 		seg5.fillData(data, 10);
 
-		RDTBuffer sndBuf = new RDTBuffer(4);
+		RDTBuffer sndBuf = new RDTBuffer(4, 2);
 		System.out.println("Filling buffer:");
 		sndBuf.dump();
 		sndBuf.putNext(seg);
@@ -108,7 +108,7 @@ public class TestClient {
 		int dst_port = Integer.parseInt(args[1]);
 		int local_port = Integer.parseInt(args[2]);
 
-		RDT rdt = new RDT(hostname, dst_port, local_port, 3, 1);
+		RDT rdt = new RDT(hostname, dst_port, local_port, 3, 3);
 		RDT.setLossRate(0.4);
 		//RDT.setLossRate(0);
 
@@ -138,7 +138,8 @@ public class TestClient {
 	     System.out.println(System.currentTimeMillis() + ":Client has sent all data " );
 	     System.out.flush();
 	     
-	     rdt.receive(buf, RDT.MSS);
+	     //rdt.receive(buf, RDT.MSS);
+
 	     rdt.close();
 	     System.out.println("Client is done " );
 
