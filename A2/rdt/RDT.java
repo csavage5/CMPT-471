@@ -104,6 +104,7 @@ public class RDT {
 		// divide data into segments
 		int index = 0;
 		ArrayList<RDTSegment> segments = new ArrayList<>();
+		int counter = 0;
 
 		while (size - index > MSS) {
 			segments.add(new RDTSegment());
@@ -115,7 +116,7 @@ public class RDT {
 		if (index < size - 1) {
 			// CASE: have left over data < MSS that needs to be sent
 			seg = new RDTSegment();
-			// give segment instance of utility and sendBuf to give to interal timeoutHandler
+			// set segment instance of utility and sendBuf for internal timeoutHandler
 			seg.utility = utility;
 			seg.sndBuf = sndBuf;
 
@@ -131,14 +132,24 @@ public class RDT {
 			rdtSeg.rcvWin = rcvBuf.size;
 			rdtSeg.checksum = rdtSeg.computeChecksum();
 			sndBuf.putNext(rdtSeg);
+			counter += rdtSeg.length;
 			sndBuf.dump();
 			increaseSeqNum();
 		}
 
-		// TODO block until senderthread waits for new data / sndBuf is empty
-		// TODO kill senderthread
 
-		return size;
+		// all packets have been enqueued - block until all packets are successfully sent
+		synchronized (sndBuf.mutBufEmpty) {
+			while (!sndBuf.checkForEmptyBuf()) {
+				try {
+					sndBuf.mutBufEmpty.wait();
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
+			}
+		}
+
+		return counter;
 	}
 
 	/**
@@ -237,6 +248,8 @@ class RDTBuffer {
 
 	public final Object mutNextNull = new Object(); // wait on this for base to be acknowledged
 	public boolean condNextNotNull = false;
+	
+	public final Object mutBufEmpty = new Object();
 
 	public final Object mutBufAccess = new Object(); // mutex for access to buf[]
 	
@@ -311,6 +324,7 @@ class RDTBuffer {
 				condNextNotNull = false;
 				while (!condNextNotNull) {
 					try {
+
 						mutNextNull.wait();
 					} catch (InterruptedException e) {
 						e.printStackTrace();
@@ -524,6 +538,16 @@ class RDTBuffer {
 
 			base++;
 
+
+			// increment SemEmpty, decrement SemFull
+			semEmpty.release();
+			try {
+				semFull.acquire();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+
+
 			if (getBuf(base) != null) {
 
 				notifyThreadOnValidBase();
@@ -537,14 +561,9 @@ class RDTBuffer {
 				synchronized (mutBaseFull) {
 					condBaseFull = false;
 				}
-			}
 
-			// increment SemEmpty, decrement SemFull
-			semEmpty.release();
-			try {
-				semFull.acquire();
-			} catch (InterruptedException e) {
-				e.printStackTrace();
+				// notify send() that buf may be empty
+				notifyThreadOnEmptyBuf();
 			}
 
 		}
@@ -571,16 +590,12 @@ class RDTBuffer {
 		return result;
 	}
 
-	public boolean checkForBaseFull() {
-		boolean result = false;
-		synchronized (mutBufAccess) {
-			RDTSegment seg = getBuf(base);
-			if (seg != null) {
-				result = true;
-			}
-		}
-
-		return result;
+	/**
+	 * 
+	 * @return TRUE if buf is empty, FALSE if not
+	 */
+	public boolean checkForEmptyBuf() {
+		return semFull.availablePermits() == 0;
 	}
 
 	/**
@@ -601,6 +616,18 @@ class RDTBuffer {
 		}
 
 	}
+
+	/**
+	 * Verifies that buffer is empty - if so, notify thread waiting on mutBufEmpty
+	 */
+	public void notifyThreadOnEmptyBuf() {
+		if (checkForEmptyBuf()) {
+			synchronized (mutBufEmpty) {
+				mutBufEmpty.notifyAll();
+			}
+		}
+	}
+
 	// for debugging
 	public void dump() {
 		System.out.println("Base: " + base + "; NextToSend: " + next + "; NextFreeSlot: " + nextFreeSlot);

@@ -32,7 +32,7 @@ public class Utility {
 			
 		double d = RDT.random.nextDouble();
 		if ( d < RDT.lossRate) { // simulate network loss
-			System.out.println(System.currentTimeMillis()+":udp_send: Lost Segment: seqNum=" + 
+			System.out.println("[udp_send] Lost Segment: seqNum=" +
 					       seg.seqNum + "  ackNum=" + seg.ackNum + " ***");
 			System.out.flush();
 	        return;
@@ -51,10 +51,10 @@ public class Utility {
 			Thread.sleep(delay);
 			socket.send(new DatagramPacket(payload, payloadSize, ip, port));
 		} catch (Exception e) {
-			System.out.println("udp_send: " + e);
+			System.out.println("[udp_send] error: " + e);
 		}
 		
-		System.out.println(System.currentTimeMillis()+":udp_send: sent Segment: seqNum=" 
+		System.out.println("[udp_send] sent Segment: seqNum="
 					+ seg.seqNum + "  ackNum=" + seg.ackNum
 					+ "   After delay= " + delay) ;
 		System.out.flush();
