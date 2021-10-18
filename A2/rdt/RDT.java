@@ -18,7 +18,7 @@ public class RDT {
 	public static final int MAX_BUF_SIZE = 3;  
 	public static final int GBN = 1;   // Go back N protocol
 	public static final int SR = 2;    // Selective Repeat
-	public static final int protocol = SR;
+	public static final int protocol = GBN;
 
 	public int seqNum = 1;
 	
@@ -232,8 +232,8 @@ class RDTBuffer {
 	public Semaphore semFull; // #of full slots
 	public Semaphore semEmpty; // #of Empty slots
 
-	public final Object mutBaseAck = new Object(); // wait on this for base to be acknowledged
-	public boolean condBaseAck = false;
+	public final Object mutBaseFull = new Object(); // wait on this for base to be acknowledged
+	public boolean condBaseFull = false;
 
 	public final Object mutNextNull = new Object(); // wait on this for base to be acknowledged
 	public boolean condNextNotNull = false;
@@ -350,6 +350,7 @@ class RDTBuffer {
 	public boolean putSeqNum (RDTSegment seg) {
 		boolean result = true;
 		synchronized (mutBufAccess) {
+
 			if (seg.seqNum-1 > base + (size - 1)) {
 				// CASE: window can't accept packet, SEQ too large for window
 				result = false;
@@ -357,12 +358,16 @@ class RDTBuffer {
 
 			} else if(seg.seqNum-1 < base) {
 				//CASE: packet has already been accepted by main thread, re-send ACK
+				result = true;
 			} else if (getBuf(seg.seqNum-1) == null) {
 				// CASE: buffer slot is empty, put in
 				setBuf(seg.seqNum-1, seg);
+
 				// for rcvBuf - all segments should be ack'd so shift_window always
 				// works when receive() calls it
 				getBuf(seg.seqNum-1).ackReceived = true;
+				semFull.release();
+
 				System.out.println("[RDTBuffer] [SR] added packet to buffer.");
 			} else if (getBuf(seg.seqNum-1) != null) {
 				System.out.println("[RDTBuffer] [SR] can't add packet to rcvBuf, slot occupied.");
@@ -453,48 +458,49 @@ class RDTBuffer {
 	}
 
 	/**
-	 *
+	 * Wait for base of rcvBuf to be eligible to be received
 	 * @return
 	 */
 	public RDTSegment receiveBase() {
 
 		RDTSegment seg = null;
-		boolean baseAck = false;
+		boolean baseNull = true;
 
-		// check if base is ACK'd
+		// check if base is occupied
 		synchronized (mutBufAccess) {
 			seg = getBuf(base);
 
-			if (seg != null && seg.ackReceived) {
-				baseAck = true;
+			if (seg != null) {
+				baseNull = false;
 				System.out.println("[RDTBuffer] Base is ACK'd");
 			}
-
 		}
 
-		if (!baseAck) {
-			// CASE: base is not ack'd, wait
-			synchronized (mutBaseAck) {
-				while (!condBaseAck) {
+		if (baseNull) {
+			// CASE: base is not full, wait
+			synchronized (mutBaseFull) {
+				while (!condBaseFull) {
 					try {
-						mutBaseAck.wait();
+						mutBaseFull.wait();
+
 					} catch (InterruptedException e) {
 						e.printStackTrace();
 					}
 				}
-				condBaseAck = false;
+				condBaseFull = false;
 			}
 		}
 
-		// BASE is ack'd, shift window and receive base
+		// BASE is full, shift window and receive base
 		return shiftWindow();
-
 	}
 	/**
 	 * Attempt to shift window - keep calling until null if multiple shifts are necessary
 	 * @return ack'd segment @ base if successful, null if not
 	 */
 	public RDTSegment shiftWindow() {
+		dump();
+
 		RDTSegment seg = null;
 
 		// get base, verify seg is ACK'd, remove if ACK
@@ -518,22 +524,33 @@ class RDTBuffer {
 
 			base++;
 
-			if (next > base && getBuf(base) != null && RDT.protocol == RDT.GBN) {
-				// CASE: new base has already been sent,
-				// start timer on new base (GBN only)
-				getBuf(base).startTimer();
+			if (getBuf(base) != null) {
+
+				notifyThreadOnValidBase();
+
+				if (next > base && RDT.protocol == RDT.GBN) {
+					 // CASE: new base has already been sent,
+					 // start timer on new base (GBN only)
+					 getBuf(base).startTimer();
+				 }
+			} else {
+				synchronized (mutBaseFull) {
+					condBaseFull = false;
+				}
+			}
+
+			// increment SemEmpty, decrement SemFull
+			semEmpty.release();
+			try {
+				semFull.acquire();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
 			}
 
 		}
 
-		// increment SemEmpty, decrement SemFull
-		semEmpty.release();
-		try {
-			semFull.acquire();
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
 		System.out.println("[RDTBuffer] shifted window.");
+		dump();
 		return seg;
 
 	}
@@ -554,15 +571,35 @@ class RDTBuffer {
 		return result;
 	}
 
+	public boolean checkForBaseFull() {
+		boolean result = false;
+		synchronized (mutBufAccess) {
+			RDTSegment seg = getBuf(base);
+			if (seg != null) {
+				result = true;
+			}
+		}
+
+		return result;
+	}
+
 	/**
-	 * When segment at BASE is ack'd, wake up thread waiting
+	 * When segment at BASE is not null, wake up thread waiting
 	 * for a segment to receive in the application layer
 	 */
-	public void notifyThreadOnReceiveBase() {
-		synchronized (mutBaseAck) {
-			condBaseAck = true;
-			mutBaseAck.notifyAll();
+	public void notifyThreadOnValidBase() {
+		synchronized (mutBufAccess) {
+			RDTSegment seg = getBuf(base);
+			if (seg != null) {
+				synchronized (mutBaseFull) {
+					condBaseFull = true;
+					mutBaseFull.notifyAll();
+					System.out.println("[RDTBuffer] notifying main thread");
+					System.out.flush();
+				}
+			}
 		}
+
 	}
 	// for debugging
 	public void dump() {
@@ -712,10 +749,11 @@ class ReceiverThread extends Thread {
 					receivedSegment.ackReceived = true; // tells the buffer it's OK to shift window
 					rcvBuf.putNext(receivedSegment);
 					rcvBuf.dump();
-					if (rcvBuf.checkForBaseAck()) {
-						// CASE: rcvBuf[base] is ACK'd, notify thread waiting
-						rcvBuf.notifyThreadOnReceiveBase();
-					}
+//					if (rcvBuf.checkForBaseFull()) {
+//						// CASE: rcvBuf[base] is full, notify main thread waiting
+//						rcvBuf.notifyThreadOnValidBase();
+//					}
+					rcvBuf.notifyThreadOnValidBase();
 					rcvBuf.dump();
 					lastReceivedSegment += 1;
 				}
@@ -795,10 +833,12 @@ class ReceiverThread extends Thread {
 
 					receivedSegment.ackReceived = true; // tells the buffer it's OK to shift window
 
-					if (rcvBuf.checkForBaseAck()) {
-						// CASE: rcvBuf[base] is ACK'd, notify thread waiting
-						rcvBuf.notifyThreadOnReceiveBase();
-					}
+//					if (rcvBuf.checkForBaseFull()) {
+//						// CASE: rcvBuf[base] is full, notify thread waiting
+//						rcvBuf.notifyThreadOnValidBase();
+//					}
+
+					rcvBuf.notifyThreadOnValidBase();
 
 					System.out.println("[ReceiverThread] sending ACK for SEG " + receivedSegment.seqNum);
 					RDTSegment ackSegment = new RDTSegment();
@@ -806,7 +846,7 @@ class ReceiverThread extends Thread {
 					ackSegment.checksum = ackSegment.computeChecksum();
 
 					Utility.udp_send(ackSegment, socket, dst_ip, dst_port);
-					sndBuf.dump();
+					rcvBuf.dump();
 
 				}
 
