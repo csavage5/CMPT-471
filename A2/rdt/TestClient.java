@@ -1,6 +1,6 @@
 /**
  * @author mohamed
- *
+ * @author Cameron Savage | cdsavage@sfu.ca
  */
 
 package rdt;
@@ -109,8 +109,8 @@ public class TestClient {
 		int local_port = Integer.parseInt(args[2]);
 
 		RDT rdt = new RDT(hostname, dst_port, local_port, 3, 1);
-		//RDT.setLossRate(0.4);
-		RDT.setLossRate(0);
+		RDT.setLossRate(0.4);
+		//RDT.setLossRate(0);
 
 		 byte[] buf = new byte[RDT.MSS];
 		 byte[] data = new byte[10];
@@ -118,21 +118,21 @@ public class TestClient {
 			 data[i] = 0;
 		 rdt.send(data, 10);
 
-//		 for (int i=0; i<10; i++)
-//			 data[i] = 1;
-//		 rdt.send(data, 10);
-//
-//		 for (int i=0; i<10; i++)
-//			 data[i] = 2;
-//		 rdt.send(data, 10);
-//
-//		 for (int i=0; i<10; i++)
-//			 data[i] = 3;
-//		 rdt.send(data, 10);
-//
-//		 for (int i=0; i<10; i++)
-//			 data[i] = 4;
-//		 rdt.send(data, 10);
+		 for (int i=0; i<10; i++)
+			 data[i] = 1;
+		 rdt.send(data, 10);
+
+		 for (int i=0; i<10; i++)
+			 data[i] = 2;
+		 rdt.send(data, 10);
+
+		 for (int i=0; i<10; i++)
+			 data[i] = 3;
+		 rdt.send(data, 10);
+
+		 for (int i=0; i<10; i++)
+			 data[i] = 4;
+		 rdt.send(data, 10);
 	 
 	     
 	     System.out.println(System.currentTimeMillis() + ":Client has sent all data " );

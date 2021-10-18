@@ -1,7 +1,7 @@
 /**
  * 
  * @author mohamed
- *
+ * @author Cameron Savage | cdsavage@sfu.ca
  */
 
 package rdt;
@@ -22,9 +22,7 @@ public class RDTSegment {
 
 	public boolean ackReceived;
 
-	private int seed = 471;
-
-	public final Timer timer = new Timer();
+	private Timer timer;
 	public Utility utility;
 	public RDTBuffer sndBuf;
 	public TimeoutHandler timeoutHandler;  // make it for every segment, 
@@ -60,64 +58,31 @@ public class RDTSegment {
 	}
 
 	/**
-	 * Compute checksum, return 1's complement value
+	 * Compute checksum, return 1's complement value of lowest 8 bits
 	 * @return
 	 */
 	public int computeChecksum() {
-//		CRC32 crc32 = new CRC32();
-//
-//		byte[] bytes = new byte[HDR_SIZE + length];
-//		makePayload(bytes);
-//
-//		//crc32.reset();
-//		crc32.update(0); // give consistent initial value
-//		crc32.update(bytes, 0, HDR_SIZE + length);
-
-//		crc32.update(seqNum);
-//		crc32.update(ackNum);
-//		crc32.update(flags);
-//		crc32.update(rcvWin);
-//		crc32.update(length);
-//		crc32.update(data);
 
 		// header
 		int sum = (seqNum & 0x000000FF); // take lowest 8 bits
+		//System.out.println("[RDTSegment] computeChecksum: add seqNum; sum = " + sum);
 		sum += ackNum & 0x000000FF;
+		//System.out.println("[RDTSegment] computeChecksum: add ackNum; sum = " + sum);
 		sum += flags & 0x000000FF;
+		//System.out.println("[RDTSegment] computeChecksum: add flags; sum = " + sum);
 		sum += rcvWin & 0x000000FF;
+		//System.out.println("[RDTSegment] computeChecksum: add rcvWin; sum = " + sum);
 		sum += length & 0x000000FF;
+		//System.out.println("[RDTSegment] computeChecksum: add length; sum = " + sum);
 
 		// data
-		for (int i = 0; i+1 < length; i+=2) {
+		for (int i = 0; i < length; i++) {
 			sum += data[i] & 0x000000FF;
+			//System.out.println("[RDTSegment] computeChecksum: add data[" + i + "] = " + data[i] + "; sum = " + sum);
 		}
 
-
-		// header
-//		int sum = seqNum;
-//		sum += ackNum;
-//		sum += flags;
-//		sum += rcvWin;
-//		sum += length;
-//
-//		for (int i=0; i<length; i++) {
-//			sum += data[i];
-//		}
-
-		// return 1's complement of sum
-
-
-		/*
-		System.out.println("Checksum value: " + crc32.getValue());
-		System.out.println("Checksum value after bitshift: " + (crc32.getValue() >> 16));
-		System.out.println("Bitshift Checksum value after cast: " + (int) (crc32.getValue() >> 16));
-		*/
-		// shift it down 16 bits to get a 16 bit checksum
-		// avoids issues with negative numbers
-		//int result = (int) (crc32.getValue() >>> 16);
-		//result &= ~0xFFFF0000; // clear upper 16 bits
-		//crc32.reset();
-		return sum & 0x000000FF;
+		System.out.println("[RDTSegment] computeChecksum = " + (sum & 0x000000FF) );
+		return ~sum & 0x000000FF;
 	}
 
 	/**
@@ -125,20 +90,7 @@ public class RDTSegment {
 	 * @return
 	 */
 	public boolean isValid() {
-		// XOR 1's complement result to convert back to non-flipped, then add
-		// 1's complement checksum value
-
-		//System.out.println("[RDTSegment] checksum result: " + (~computeChecksum())  + checksum);
-//		System.out.println("Packet SEG " + this.seqNum + " ACK " + this.ackNum  + "checksum: \n" +
-//				"computeChecksum: " + this.computeChecksum() + "\n" +
-//				"~computeChecksum: " + ~this.computeChecksum() + "\n" +
-//				"checksum: " + this.checksum + "\n" +
-//				"isValid: " + ~computeChecksum()  + checksum + "\n");
-
-		System.out.println("Packet SEG " + this.seqNum + " ACK " + this.ackNum  + " checksum: \n" +
-				"computeChecksum: " + this.computeChecksum() + "\n" +
-				"checksum: " + this.checksum + "\n");
-		return checksum == computeChecksum();
+		return ( checksum + (~computeChecksum() & 0x000000FF) == 0x000000FF);
 	}
 
 	/**
@@ -180,15 +132,18 @@ public class RDTSegment {
 	 * Begin timer after segment is sent
 	 */
 	public void startTimer(){
+		timer = new Timer();
 		timeoutHandler = new TimeoutHandler(sndBuf, utility, this);
-		this.timer.schedule(this.timeoutHandler, RDT.RTO);
+		timer.schedule(this.timeoutHandler, RDT.RTO);
 	}
 
 	/**
 	 * Stop timer if ACK received before timeout occurs
 	 */
 	public void stopTimer() {
-		this.timer.cancel();
+		if (timer != null) {
+			timer.cancel();
+		}
 	}
 
 	public void printHeader() {

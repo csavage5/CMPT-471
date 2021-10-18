@@ -1,6 +1,6 @@
 /**
  * @author mhefeeda
- *
+ * @author Cameron Savage | cdsavage@sfu.ca
  */
 
 package rdt;
@@ -17,15 +17,7 @@ class TimeoutHandler extends TimerTask {
 	DatagramSocket socket;
 	InetAddress ip;
 	int port;
-	
-//	TimeoutHandler (RDTBuffer sndBuf_, RDTSegment s, DatagramSocket sock,
-//			InetAddress ip_addr, int p) {
-//		sndBuf = sndBuf_;
-//		seg = s;
-//		socket = sock;
-//		ip = ip_addr;
-//		port = p;
-//	}
+
 
 	TimeoutHandler (RDTBuffer sndBuf_, Utility _utility, RDTSegment _seg) {
 		sndBuf = sndBuf_;
@@ -35,15 +27,21 @@ class TimeoutHandler extends TimerTask {
 	
 	public void run() {
 		
-		System.out.println(System.currentTimeMillis()+ ":Timeout for seg: " + seg.seqNum);
-		System.out.flush();
+		//System.out.println(System.currentTimeMillis()+ ":Timeout for seg: " + seg.seqNum);
+		//System.out.flush();
 		
-		// complete 
+		// complete
+
+		if (seg.ackReceived) {
+			// CASE: segment has been acknowledged, don't re-send
+			return;
+		}
+
 		switch(RDT.protocol){
 			case RDT.GBN:
 				// move sndBuf.next to base, restart timer
 				sndBuf.GoBackN();
-				System.out.println("[TimeoutHandler] timer expired on SEG " +
+				System.out.println("[TimeoutHandler] timeout on SEG " +
 						seg.seqNum + " ACK " + seg.ackNum +
 						" - re-setting sndBuf.next to base");
 				break;
@@ -53,6 +51,8 @@ class TimeoutHandler extends TimerTask {
 				System.out.println("[TimeoutHandler] timer expired on SEG " +
 						seg.seqNum + " ACK " + seg.ackNum +
 						" - re-sending.");
+
+				seg.startTimer();
 				break;
 			default:
 				System.out.println("Error in TimeoutHandler:run(): unknown protocol");

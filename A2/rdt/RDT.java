@@ -1,7 +1,7 @@
 
 /**
  * @author mohamed
- *
+ * @author Cameron Savage | cdsavage@sfu.ca
  */
 package rdt;
 
@@ -18,7 +18,7 @@ public class RDT {
 	public static final int MAX_BUF_SIZE = 3;  
 	public static final int GBN = 1;   // Go back N protocol
 	public static final int SR = 2;    // Selective Repeat
-	public static final int protocol = GBN;
+	public static final int protocol = SR;
 
 	public int seqNum = 1;
 	
@@ -128,12 +128,15 @@ public class RDT {
 		for (RDTSegment rdtSeg:segments) {
 			// TODO - modify flags for segment
 			rdtSeg.seqNum = seqNum;
-			rdtSeg.checksum = rdtSeg.computeChecksum();
 			rdtSeg.rcvWin = rcvBuf.size;
+			rdtSeg.checksum = rdtSeg.computeChecksum();
 			sndBuf.putNext(rdtSeg);
 			sndBuf.dump();
 			increaseSeqNum();
 		}
+
+		// TODO block until senderthread waits for new data / sndBuf is empty
+		// TODO kill senderthread
 
 		return size;
 	}
@@ -203,12 +206,13 @@ class SenderThread extends Thread {
 			seg = sndBuf.getNext();
 
 			if (seg != null) {
-				seg.printHeader();
-				seg.printData();
+				//seg.printHeader();
+				//seg.printData();
 
 				Utility.udp_send(seg, socket, dst_ip, dst_port);
-				System.out.println("[SenderThread] sent UDP packet");
-				sndBuf.dump();
+				System.out.println("[SenderThread] sent packet SEQ " + seg.seqNum +
+						" ACK " + seg.ackNum);
+				//sndBuf.dump();
 			}
 
 
@@ -259,22 +263,25 @@ class RDTBuffer {
 	// Put a segment in the next available slot in the buffer
 	public void putNext(RDTSegment seg) {
 
-		synchronized (mutBufAccess) {
-			try {
-				semEmpty.acquire(); // wait for an empty slot
-				setBuf(nextFreeSlot, seg);
+		try {
+			// wait for an empty slot
+			semEmpty.acquire();
+		} catch(InterruptedException e) {
+			System.out.println("Buffer put(): " + e);
+		}
 
-				nextFreeSlot++;  // increment nextFreeSlot, since this slot is full
-				semFull.release(); // increase #of full slots
-			} catch(InterruptedException e) {
-				System.out.println("Buffer put(): " + e);
-			}
+		synchronized (mutBufAccess) {
+			setBuf(nextFreeSlot, seg);
+
+			nextFreeSlot++;  // increment nextFreeSlot, since this slot is full
+			semFull.release(); // increase #of full slots
 
 			System.out.println("[RDTBuffer] added segment.");
-
 		}
 
 		synchronized (mutNextNull) {
+			// notify a waiting thread that NEXT points to
+			// a not-null segment
 			condNextNotNull = true;
 			mutNextNull.notifyAll();
 		}
@@ -338,29 +345,36 @@ class RDTBuffer {
 	 * [SR] Put a segment in the *right* slot based on seg.seqNum
 	 * For rcvBuf
 	 * @param seg
+	 * @return TRUE if successful / duplicate \ already accepted, FALSE if outside of window (SEQ too large)
 	 */
-	public void putSeqNum (RDTSegment seg) {
-		// TODO ***** complete
-
+	public boolean putSeqNum (RDTSegment seg) {
+		boolean result = true;
 		synchronized (mutBufAccess) {
+			if (seg.seqNum-1 > base + (size - 1)) {
+				// CASE: window can't accept packet, SEQ too large for window
+				result = false;
+				System.out.println("[RDTBuffer] [SR] Can't add packet to rcvBuf, SEQ # outside of window");
 
-			if (seg.seqNum-1 < base || seg.seqNum-1 > base + (size - 1)) {
-				// CASE: can't add packet to rcvBuffer, not within window
-
-			}
-
-			if (getBuf(seg.seqNum-1) == null) {
+			} else if(seg.seqNum-1 < base) {
+				//CASE: packet has already been accepted by main thread, re-send ACK
+			} else if (getBuf(seg.seqNum-1) == null) {
 				// CASE: buffer slot is empty, put in
 				setBuf(seg.seqNum-1, seg);
+				// for rcvBuf - all segments should be ack'd so shift_window always
+				// works when receive() calls it
+				getBuf(seg.seqNum-1).ackReceived = true;
+				System.out.println("[RDTBuffer] [SR] added packet to buffer.");
+			} else if (getBuf(seg.seqNum-1) != null) {
+				System.out.println("[RDTBuffer] [SR] can't add packet to rcvBuf, slot occupied.");
 			}
-
 		}
 
+		return result;
+
 		// seg.seqNum-1 must be between [base, base + size - 1] (seq starts at 1, base/next start at 0)
-
-
 		// getBuf[seg.SeqNum-1] == null
 		// caller must also call check for baseACK - if it's at base,
+		// notify receiver to shift window and receive base
 	}
 
 	/**
@@ -389,10 +403,10 @@ class RDTBuffer {
 	}
 
 	/**
-	 * Acknowledge matching packet(s) to this ackNumber
+	 * [GBN] Acknowledge cumulative matching packet(s) to this ackNumber
 	 * @param ackSeg Received Acknowledgement segment
 	 */
-	public void ackSeqNum(RDTSegment ackSeg) {
+	public void ackSeqNumGBN(RDTSegment ackSeg) {
 		// scan through and ACK all matching packets
 		// move base whenever base is ack'd
 		//ArrayList<RDTSegment> ackdSegList = new ArrayList<>();
@@ -402,19 +416,46 @@ class RDTBuffer {
 		synchronized (mutBufAccess) {
 			for (int i = base; i < next; i++) {
 				seg = getBuf(i);
-				if (seg.seqNum <= ackSeg.ackNum) {
+
+				if (seg != null && seg.seqNum <= ackSeg.ackNum) {
 					// CASE: seg should be acknowledged
 					seg.ackReceived = true;
-//					if (i == base) {
-//						// CASE: BASE is acknowledged - signal waiting thread to shift window
-//						baseAck = true;
-//					}
+					seg.stopTimer();
 				}
 			}
 		}
 
 	}
 
+	/**
+	 * [GBN] Acknowledge individual matching packet(s) to this ackNumber
+	 * @param ackSeg Received Acknowledgement segment
+	 */
+	public void ackSeqNumSR(RDTSegment ackSeg) {
+		// scan through and ACK all matching packets
+		// move base whenever base is ack'd
+		//ArrayList<RDTSegment> ackdSegList = new ArrayList<>();
+		RDTSegment seg;
+		boolean baseAck = false;
+
+		synchronized (mutBufAccess) {
+			for (int i = base; i < next; i++) {
+				seg = getBuf(i);
+
+				if (seg != null && seg.seqNum == ackSeg.ackNum) {
+					// CASE: seg should be acknowledged
+					seg.ackReceived = true;
+					seg.stopTimer();
+				}
+			}
+		}
+
+	}
+
+	/**
+	 *
+	 * @return
+	 */
 	public RDTSegment receiveBase() {
 
 		RDTSegment seg = null;
@@ -454,9 +495,7 @@ class RDTBuffer {
 	 * @return ack'd segment @ base if successful, null if not
 	 */
 	public RDTSegment shiftWindow() {
-		//ArrayList<RDTSegment> ackdSegList = new ArrayList<>();
 		RDTSegment seg = null;
-		boolean baseAck = false;
 
 		// get base, verify seg is ACK'd, remove if ACK
 		synchronized (mutBufAccess) {
@@ -470,15 +509,18 @@ class RDTBuffer {
 			// replace base with null, increment
 			setBuf(base, null);
 
+			// stop timer on base
+			seg.stopTimer();
+
 			if (base == next) {
 				next++;
 			}
 
 			base++;
 
-			if (next > base && getBuf(base) != null) {
-				// CASE: have sent segments further in the buffer,
-				// start timer on new base
+			if (next > base && getBuf(base) != null && RDT.protocol == RDT.GBN) {
+				// CASE: new base has already been sent,
+				// start timer on new base (GBN only)
 				getBuf(base).startTimer();
 			}
 
@@ -503,7 +545,8 @@ class RDTBuffer {
 	public boolean checkForBaseAck() {
 		boolean result = false;
 		synchronized (mutBufAccess) {
-			if (getBuf(base).ackReceived) {
+			RDTSegment seg = getBuf(base);
+			if (seg != null && seg.ackReceived) {
 				result = true;
 			}
 		}
@@ -530,13 +573,20 @@ class RDTBuffer {
 			for (int i = 0; i < size; i++) {
 				if (buf[i] != null) {
 					if (buf[i].seqNum != 0) {
-						System.out.print("[ SEG " + buf[i].seqNum + " ]");
+						System.out.print("[ SEG " + buf[i].seqNum + " A:");
+
+						if (buf[i].ackReceived) {
+							System.out.print("Y ]");
+						} else {
+							System.out.print("N ]");
+						}
+
 					} else if (buf[i].ackNum != 0) {
 						System.out.print("[ ACK " + buf[i].ackNum + " ]");
 					}
 
 				} else if (buf[i % size] == null) {
-					System.out.print("[       ]");
+					System.out.print("[           ]");
 				}
 
 				if (i == base%size) {System.out.print(" <-- BASE"); }
@@ -571,7 +621,24 @@ class ReceiverThread extends Thread {
 		dst_port = dst_port_;
 	}
 
+
 	public void run() {
+		switch (RDT.protocol) {
+			case RDT.GBN:
+				run_GBN();
+				break;
+
+			case RDT.SR:
+				run_SR();
+				break;
+
+			default:
+				System.out.println("Error in ReceiverThread.run(): unknown protocol");
+		}
+	}
+
+
+	private void run_GBN() {
 
 		// Essentially:  while(cond==true){  // may loop forever if you don't implement RDT::close()
 		//                socket.receive(pkt)
@@ -582,7 +649,7 @@ class ReceiverThread extends Thread {
 		//                             stuff (e.g, send ACK)
 		//
 
-		System.out.println("[ReceiverThread] started.");
+		System.out.println("[ReceiverThread] GBN protocol started.");
 
 		byte[] packetBuffer = new byte[RDT.MSS];
 		DatagramPacket packet = new DatagramPacket(packetBuffer, RDT.MSS);
@@ -598,28 +665,27 @@ class ReceiverThread extends Thread {
 			RDTSegment receivedSegment = new RDTSegment();
 			makeSegment(receivedSegment, packet.getData());
 
-			System.out.print("[ReceiverThread] received packet:\n  ");
-			receivedSegment.printHeader();
-			receivedSegment.printData();
+			//System.out.print("[ReceiverThread] received packet:\n  ");
+			//receivedSegment.dump();
 
 			if (!receivedSegment.isValid()) {
 				// CASE: packet was corrupted, drop it
 				System.out.println("[ReceiverThread] dropped corrupted packet.");
-				receivedSegment.dump();
 				continue;
 			}
 
 			if (receivedSegment.containsAck()) {
 				// CASE: packet is an ACK; remove matching
 				// 		 segments waiting for ACK from sndBuf
-				System.out.println("[ReceiverThread] packet is ACK " + receivedSegment.ackNum);
-				sndBuf.ackSeqNum(receivedSegment);
+				System.out.println("[ReceiverThread] received ACK packet ACK " + receivedSegment.ackNum);
+				sndBuf.ackSeqNumGBN(receivedSegment);
+				sndBuf.dump();
 
 				if (sndBuf.checkForBaseAck()) {
-					// CASE: base segment in send buffer is ACK'd - shift window
+					// CASE: base segment in sndBuf is ACK'd - shift SEND window
 					while(true) {
 						if (sndBuf.shiftWindow() == null){
-							// CASE: window can't shift any further, stop
+							// CASE: send window can't shift any further, stop
 							break;
 						}
 					}
@@ -631,20 +697,21 @@ class ReceiverThread extends Thread {
 				// CASE: packet is data segment, verify it's
 				// 		 received in-order
 
-				System.out.println("[ReceiverThread] received data: SEG " + receivedSegment.seqNum);
+				System.out.println("[ReceiverThread] received data packet SEG " + receivedSegment.seqNum);
 
 				if (receivedSegment.seqNum < lastReceivedSegment ||
 						receivedSegment.seqNum >= lastReceivedSegment + 2) {
 					// CASE: packet is out-of-order, drop
-					System.out.println("SEG " + receivedSegment.seqNum + " out of order, dropping.");
+					System.out.println("[ReceiverThread] SEG " + receivedSegment.seqNum + " out of order, dropping.");
 					continue;
 				}
 
 				if (receivedSegment.seqNum == lastReceivedSegment + 1) {
 					// CASE: packet is not a duplicate, place in rcvBuf
-					System.out.println("SEG " + receivedSegment.seqNum + " in order, placing in rcvBuf.");
+					System.out.println("[ReceiverThread] SEG " + receivedSegment.seqNum + " in order, placing in rcvBuf.");
 					receivedSegment.ackReceived = true; // tells the buffer it's OK to shift window
 					rcvBuf.putNext(receivedSegment);
+					rcvBuf.dump();
 					if (rcvBuf.checkForBaseAck()) {
 						// CASE: rcvBuf[base] is ACK'd, notify thread waiting
 						rcvBuf.notifyThreadOnReceiveBase();
@@ -659,20 +726,94 @@ class ReceiverThread extends Thread {
 				RDTSegment ackSegment = new RDTSegment();
 				ackSegment.ackNum = lastReceivedSegment;
 				ackSegment.checksum = ackSegment.computeChecksum();
-				System.out.println("[ReceiverThread] checksum for ACK " + lastReceivedSegment + ": " +
-						ackSegment.checksum);
-
+				//System.out.println("[ReceiverThread] checksum for ACK " + lastReceivedSegment + ": " +
+						//ackSegment.checksum);
 
 				Utility.udp_send(ackSegment, socket, dst_ip, dst_port);
-
-				//sndBuf.putNext(ackSegment);
+				sndBuf.dump();
 
 			}
 
 		}
 
 	}
-	
+
+
+	private void run_SR() {
+		System.out.println("[ReceiverThread] SR protocol started.");
+
+		byte[] packetBuffer = new byte[RDT.MSS];
+		DatagramPacket packet = new DatagramPacket(packetBuffer, RDT.MSS);
+
+		while (true) {
+			try {
+				socket.receive(packet);
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+
+			//make segment from packet
+			RDTSegment receivedSegment = new RDTSegment();
+			makeSegment(receivedSegment, packet.getData());
+
+			if (!receivedSegment.isValid()) {
+				// CASE: packet was corrupted, drop it
+				System.out.println("[ReceiverThread] dropped corrupted packet.");
+				continue;
+			}
+
+			if (receivedSegment.containsAck()) {
+				// CASE: packet is an ACK; remove matching
+				// 		 segment waiting for ACK from sndBuf
+				System.out.println("[ReceiverThread] received ACK packet ACK " + receivedSegment.ackNum);
+				sndBuf.ackSeqNumSR(receivedSegment);
+				sndBuf.dump();
+
+				if (sndBuf.checkForBaseAck()) {
+					// CASE: base segment in sndBuf is ACK'd - shift SEND window
+					while(true) {
+						if (sndBuf.shiftWindow() == null){
+							// CASE: send window can't shift any further, stop
+							break;
+						}
+					}
+				}
+
+				sndBuf.dump();
+
+			} else if (receivedSegment.containsData()) {
+				// CASE: packet is data segment, put in rcvBuf based on seq #
+
+				System.out.println("[ReceiverThread] received data packet SEG " + receivedSegment.seqNum);
+
+				if (!rcvBuf.putSeqNum(receivedSegment)) {
+					// CASE: packet is outside of window (after window)
+					System.out.println("[ReceiverThread] SEG " + receivedSegment.seqNum + " is " +
+							"outside of rcvBuf window, dropping.");
+				} else {
+					// CASE: packet is either duplicate (within or before window) or new, send ACK
+
+					receivedSegment.ackReceived = true; // tells the buffer it's OK to shift window
+
+					if (rcvBuf.checkForBaseAck()) {
+						// CASE: rcvBuf[base] is ACK'd, notify thread waiting
+						rcvBuf.notifyThreadOnReceiveBase();
+					}
+
+					System.out.println("[ReceiverThread] sending ACK for SEG " + receivedSegment.seqNum);
+					RDTSegment ackSegment = new RDTSegment();
+					ackSegment.ackNum = receivedSegment.seqNum;
+					ackSegment.checksum = ackSegment.computeChecksum();
+
+					Utility.udp_send(ackSegment, socket, dst_ip, dst_port);
+					sndBuf.dump();
+
+				}
+
+			}
+
+		}
+	}
 	
 	//
 

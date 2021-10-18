@@ -1,7 +1,7 @@
 /**
  * 
  * @author mohamed
- *
+ * @author Cameron Savage | cdsavage@sfu.ca
  */
 package rdt;
 
