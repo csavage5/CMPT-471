@@ -16,4 +16,6 @@ Changing protocol
 Bugs / issues:
     - RDT.close() is not implemented, so Client and Server must be manually killed with Ctrl-C
 
+Reason for being late:
+    - I found a bug at around 4:30, couldn't fix it in time for the deadline.
 

@@ -29,12 +29,10 @@ public class TestServer {
 	     int local_port = Integer.parseInt(args[2]);
 	     	      
 	     RDT rdt = new RDT(hostname, dst_port, local_port, 3, 3);
-	     RDT.setLossRate(0.2);
-		 //RDT.setLossRate(0);
+	     RDT.setLossRate(0.4);
 
 		 byte[] buf = new byte[500];
 	     System.out.println("Server is waiting to receive ... " );
-	
 	     
 	     while (true) {
 	    	 int size = rdt.receive(buf, RDT.MSS);

@@ -102,27 +102,32 @@ public class RDT {
 	public int send(byte[] data, int size) {
 		RDTSegment seg;
 		// divide data into segments
-		int index = 0;
+		int startOffset = 0;
 		ArrayList<RDTSegment> segments = new ArrayList<>();
-		int counter = 0;
+		int byteCounter = 0;
 
-		while (size - index > MSS) {
-			segments.add(new RDTSegment());
-			segments.get(segments.size()-1).fillData(Arrays.copyOfRange(data, index, index + MSS - 1), MSS);
+		while (size - startOffset > MSS) {
 
-			index += MSS;
+			seg = new RDTSegment();
+			seg.utility = utility;
+			seg.sndBuf = sndBuf;
+
+			seg.fillData(Arrays.copyOfRange(data, startOffset, startOffset + MSS), MSS);
+			segments.add(seg);
+
+			startOffset += MSS;
 		}
 
-		if (index < size - 1) {
+		if (startOffset < size - 1) {
 			// CASE: have left over data < MSS that needs to be sent
 			seg = new RDTSegment();
 			// set segment instance of utility and sendBuf for internal timeoutHandler
 			seg.utility = utility;
 			seg.sndBuf = sndBuf;
 
+			seg.fillData(Arrays.copyOfRange(data, startOffset, size), size - startOffset);
 			segments.add(seg);
-			segments.get(segments.size()-1).fillData(Arrays.copyOfRange(data, index, size - 1), size - 1 - index);
-			index += size - index;
+			startOffset += size - startOffset;
 		}
 
 		// enqueue segments into sndBuf
@@ -132,7 +137,7 @@ public class RDT {
 			rdtSeg.rcvWin = rcvBuf.size;
 			rdtSeg.checksum = rdtSeg.computeChecksum();
 			sndBuf.putNext(rdtSeg);
-			counter += rdtSeg.length;
+			byteCounter += rdtSeg.length;
 			sndBuf.dump();
 			increaseSeqNum();
 		}
@@ -149,7 +154,7 @@ public class RDT {
 			}
 		}
 
-		return counter;
+		return byteCounter;
 	}
 
 	/**
@@ -716,8 +721,8 @@ class ReceiverThread extends Thread {
 
 		System.out.println("[ReceiverThread] GBN protocol started.");
 
-		byte[] packetBuffer = new byte[RDT.MSS];
-		DatagramPacket packet = new DatagramPacket(packetBuffer, RDT.MSS);
+		byte[] packetBuffer = new byte[RDT.MSS + RDTSegment.HDR_SIZE];
+		DatagramPacket packet = new DatagramPacket(packetBuffer,RDT.MSS + RDTSegment.HDR_SIZE);
 
 		while(true) {
 			try {
@@ -804,8 +809,8 @@ class ReceiverThread extends Thread {
 	private void run_SR() {
 		System.out.println("[ReceiverThread] SR protocol started.");
 
-		byte[] packetBuffer = new byte[RDT.MSS];
-		DatagramPacket packet = new DatagramPacket(packetBuffer, RDT.MSS);
+		byte[] packetBuffer = new byte[RDT.MSS + RDTSegment.HDR_SIZE];
+		DatagramPacket packet = new DatagramPacket(packetBuffer, RDT.MSS + RDTSegment.HDR_SIZE);
 
 		while (true) {
 			try {
@@ -856,11 +861,6 @@ class ReceiverThread extends Thread {
 					// CASE: packet is either duplicate (within or before window) or new, send ACK
 
 					receivedSegment.ackReceived = true; // tells the buffer it's OK to shift window
-
-//					if (rcvBuf.checkForBaseFull()) {
-//						// CASE: rcvBuf[base] is full, notify thread waiting
-//						rcvBuf.notifyThreadOnValidBase();
-//					}
 
 					rcvBuf.notifyThreadOnValidBase();
 
